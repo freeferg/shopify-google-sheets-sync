@@ -135,12 +135,24 @@ class ShopifyService {
     }
   }
 
-  async getOrder(orderId) {
+  async getOrder(orderIdOrName) {
     try {
-      const data = await this.makeRequest(`/orders/${orderId}.json`);
+      // Si c'est un nom de commande (#TCOxxxxx), chercher dans toutes les commandes
+      if (orderIdOrName.toString().startsWith('#')) {
+        console.log(`🔍 Recherche de la commande par nom: ${orderIdOrName}`);
+        const data = await this.makeRequest(`/orders.json?limit=250&status=any&name=${encodeURIComponent(orderIdOrName)}`);
+        if (data.orders && data.orders.length > 0) {
+          console.log(`✓ Commande ${orderIdOrName} trouvée`);
+          return data.orders[0];
+        }
+        throw new Error(`Commande ${orderIdOrName} non trouvée`);
+      }
+      
+      // Sinon, utiliser l'ID directement
+      const data = await this.makeRequest(`/orders/${orderIdOrName}.json`);
       return data.order;
     } catch (error) {
-      throw new Error(`Erreur lors de la récupération de la commande ${orderId}: ${error.message}`);
+      throw new Error(`Erreur lors de la récupération de la commande ${orderIdOrName}: ${error.message}`);
     }
   }
 

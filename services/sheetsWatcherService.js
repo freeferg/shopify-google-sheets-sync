@@ -131,12 +131,11 @@ class SheetsWatcherService {
       const existingOrderNumber = currentRow[6] && currentRow[6].trim();
       if (existingOrderNumber && existingOrderNumber.startsWith('#TCO')) {
         console.log(`🔍 Recherche de la commande par numéro: ${existingOrderNumber}`);
-        const orderId = existingOrderNumber.replace('#TCO', '');
         try {
-          order = await shopifyService.getOrder(orderId);
-          console.log(`✓ Commande ${existingOrderNumber} trouvée par ID`);
+          order = await shopifyService.getOrder(existingOrderNumber);
+          console.log(`✓ Commande ${existingOrderNumber} trouvée`);
         } catch (error) {
-          console.log(`⚠️ Commande ${existingOrderNumber} non trouvée par ID, recherche par nom...`);
+          console.log(`⚠️ Commande ${existingOrderNumber} non trouvée, recherche par nom...`);
         }
       }
       
