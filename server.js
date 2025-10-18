@@ -178,6 +178,26 @@ app.get('/api/watching-status', async (req, res) => {
   }
 });
 
+// Force reprocess all rows
+app.post('/api/force-reprocess', async (req, res) => {
+  try {
+    await sheetsWatcherService.stopWatching();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await sheetsWatcherService.startWatching();
+    
+    res.json({
+      success: true,
+      message: 'Retraitement forcé - toutes les lignes seront revérifiées',
+      data: sheetsWatcherService.getStatus()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Debug endpoint to see what's in the sheets
 app.get('/api/debug-sheets', async (req, res) => {
   try {

@@ -99,17 +99,35 @@ class ShopifyService {
       const data = await this.makeRequest('/orders.json?limit=250&status=any');
       const allOrders = data.orders || [];
       
-      // Filtrer les commandes par nom de client
+      // Normaliser le nom recherché
+      const searchName = customerName.toLowerCase().trim();
+      
+      // Filtrer les commandes par nom de client OU shipping name
       const matchingOrders = allOrders.filter(order => {
-        const orderCustomerName = this.getShippingName(order);
-        return orderCustomerName.toLowerCase().includes(customerName.toLowerCase()) ||
-               customerName.toLowerCase().includes(orderCustomerName.toLowerCase());
+        // Récupérer le shipping name
+        const shippingName = this.getShippingName(order).toLowerCase();
+        
+        // Récupérer le customer name (nom du compte client)
+        let customerName = '';
+        if (order.customer) {
+          customerName = `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim().toLowerCase();
+        }
+        
+        // Vérifier si l'un des deux noms correspond
+        const shippingMatch = shippingName.includes(searchName) || searchName.includes(shippingName);
+        const customerMatch = customerName && (customerName.includes(searchName) || searchName.includes(customerName));
+        
+        if (shippingMatch || customerMatch) {
+          console.log(`  ✓ Match trouvé: shipping="${shippingName}", customer="${customerName}"`);
+        }
+        
+        return shippingMatch || customerMatch;
       });
       
       // Trier par date de création (plus récentes en premier)
       matchingOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
-      console.log(`📊 ${matchingOrders.length} commandes trouvées pour ${customerName}`);
+      console.log(`📊 ${matchingOrders.length} commandes trouvées pour ${searchName}`);
       
       return matchingOrders;
     } catch (error) {
