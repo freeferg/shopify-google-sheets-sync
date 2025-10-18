@@ -7,6 +7,7 @@ require('dotenv').config();
 const shopifyService = require('./services/shopifyService');
 const googleSheetsService = require('./services/googleSheetsService');
 const orderSyncService = require('./services/orderSyncService');
+const sheetsWatcherService = require('./services/sheetsWatcherService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +28,8 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     features: [
       'Synchronisation automatique des commandes Shopify vers Google Sheets',
+      'Surveillance en temps réel de Google Sheets pour nouveaux noms',
+      'Remplissage automatique des informations Shopify par nom de client',
       'Gestion chronologique des commandes multiples par client',
       'Mapping intelligent des articles selon notation spécifique',
       'Validation de la structure du tableau Google Sheets'
@@ -35,6 +38,9 @@ app.get('/', (req, res) => {
       testConnection: 'GET /api/test-connection',
       getOrders: 'GET /api/orders?limit=10&status=any',
       syncOrders: 'POST /api/sync-orders',
+      startWatching: 'POST /api/start-watching',
+      stopWatching: 'POST /api/stop-watching',
+      watchingStatus: 'GET /api/watching-status',
       analyzeCustomer: 'GET /api/analyze-customer/:customerName',
       webhookOrderCreated: 'POST /api/webhook/order-created'
     },
@@ -112,6 +118,57 @@ app.get('/api/analyze-customer/:customerName', async (req, res) => {
     res.json({
       success: true,
       data: analysis
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Start watching Google Sheets for new names
+app.post('/api/start-watching', async (req, res) => {
+  try {
+    await sheetsWatcherService.startWatching();
+    
+    res.json({
+      success: true,
+      message: 'Surveillance Google Sheets démarrée',
+      data: sheetsWatcherService.getStatus()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Stop watching Google Sheets
+app.post('/api/stop-watching', async (req, res) => {
+  try {
+    await sheetsWatcherService.stopWatching();
+    
+    res.json({
+      success: true,
+      message: 'Surveillance Google Sheets arrêtée',
+      data: sheetsWatcherService.getStatus()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get watching status
+app.get('/api/watching-status', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: sheetsWatcherService.getStatus()
     });
   } catch (error) {
     res.status(500).json({
@@ -206,15 +263,15 @@ app.post('/api/webhook/order-updated', async (req, res) => {
 // Sync orders to Google Sheets
 app.post('/api/sync-orders', async (req, res) => {
   try {
-    const { orderIds, limit = 10 } = req.body;
+    const { orderIds, limit = 10, status = 'any' } = req.body;
     
     let orders;
     if (orderIds && orderIds.length > 0) {
       // Sync specific orders
       orders = await shopifyService.getOrdersByIds(orderIds);
     } else {
-      // Sync recent orders
-      orders = await shopifyService.getOrders(limit);
+      // Sync recent orders with optional status filter
+      orders = await shopifyService.getOrders(limit, status);
     }
     
     const syncResults = await orderSyncService.syncOrdersToSheets(orders);
@@ -256,6 +313,25 @@ app.use((req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-  console.log(`📊 API disponible sur http://localhost:${PORT}`);
-  console.log(`📋 Documentation disponible sur http://localhost:${PORT}`);
+  console.log(`📊 Application Shopify-Google Sheets Sync`);
+  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log('');
+  console.log('📋 Endpoints disponibles:');
+  console.log(`  GET  /                    - Documentation API`);
+  console.log(`  GET  /api/health          - Vérification santé`);
+  console.log(`  POST /api/sync-orders     - Synchroniser commandes`);
+  console.log(`  POST /api/start-watching  - Démarrer surveillance Google Sheets`);
+  console.log(`  POST /api/stop-watching   - Arrêter surveillance Google Sheets`);
+  console.log(`  GET  /api/watching-status - Statut surveillance`);
+  console.log(`  POST /api/webhook/order-created   - Webhook nouvelle commande`);
+  console.log(`  POST /api/webhook/order-updated   - Webhook commande mise à jour`);
+  console.log(`  POST /api/webhook/order-fulfilled - Webhook commande expédiée`);
+  console.log(`  GET  /api/analyze-customer/:name  - Analyser commandes client`);
+  console.log('');
+  
+  // Démarrer automatiquement la surveillance Google Sheets
+  console.log('🔍 Démarrage automatique de la surveillance Google Sheets...');
+  sheetsWatcherService.startWatching().catch(error => {
+    console.error('❌ Erreur lors du démarrage de la surveillance:', error.message);
+  });
 });

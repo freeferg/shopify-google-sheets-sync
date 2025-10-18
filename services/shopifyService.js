@@ -91,6 +91,32 @@ class ShopifyService {
     }
   }
 
+  async searchOrdersByCustomerName(customerName) {
+    try {
+      console.log(`🔍 Recherche des commandes pour le client: ${customerName}`);
+      
+      // Rechercher dans les commandes récentes (limite de 250)
+      const data = await this.makeRequest('/orders.json?limit=250&status=any');
+      const allOrders = data.orders || [];
+      
+      // Filtrer les commandes par nom de client
+      const matchingOrders = allOrders.filter(order => {
+        const orderCustomerName = this.getShippingName(order);
+        return orderCustomerName.toLowerCase().includes(customerName.toLowerCase()) ||
+               customerName.toLowerCase().includes(orderCustomerName.toLowerCase());
+      });
+      
+      // Trier par date de création (plus récentes en premier)
+      matchingOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      
+      console.log(`📊 ${matchingOrders.length} commandes trouvées pour ${customerName}`);
+      
+      return matchingOrders;
+    } catch (error) {
+      throw new Error(`Erreur lors de la recherche par nom: ${error.message}`);
+    }
+  }
+
   async getOrder(orderId) {
     try {
       const data = await this.makeRequest(`/orders/${orderId}.json`);

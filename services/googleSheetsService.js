@@ -249,6 +249,26 @@ if (isRailway) {
     }
   }
 
+  async updateRow(rowIndex, rowData) {
+    try {
+      await this.auth();
+      
+      const request = {
+        spreadsheetId: this.spreadsheetId,
+        range: `${this.sheetName}!${rowIndex}:${rowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [rowData]
+        }
+      };
+      
+      await this.sheets.spreadsheets.values.update(request);
+      console.log(`✅ Ligne ${rowIndex} mise à jour avec succès`);
+    } catch (error) {
+      throw new Error(`Erreur lors de la mise à jour de la ligne: ${error.message}`);
+    }
+  }
+
   async insertRowAtPosition(rowIndex, data) {
     try {
       // Insérer une ligne vide à la position spécifiée
