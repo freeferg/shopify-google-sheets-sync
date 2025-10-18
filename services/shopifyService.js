@@ -134,11 +134,41 @@ class ShopifyService {
     if (order.fulfillments && order.fulfillments.length > 0) {
       const fulfillment = order.fulfillments[0];
       if (fulfillment.tracking_number) {
-        return fulfillment.tracking_number;
+        // Créer un lien cliquable vers le suivi
+        const trackingUrl = fulfillment.tracking_url || this.generateTrackingUrl(fulfillment.tracking_number, fulfillment.tracking_company);
+        return `=HYPERLINK("${trackingUrl}","${fulfillment.tracking_number}")`;
       }
     }
     
     return '';
+  }
+
+  generateTrackingUrl(trackingNumber, carrier = '') {
+    // Générer l'URL de suivi selon le transporteur
+    const carriers = {
+      'ups': `https://www.ups.com/track?tracknum=${trackingNumber}`,
+      'fedex': `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`,
+      'dhl': `https://www.dhl.com/track?trackingNumber=${trackingNumber}`,
+      'colissimo': `https://www.laposte.fr/outils/suivre-vos-envois?code=${trackingNumber}`,
+      'chronopost': `https://www.chronopost.fr/tracking-colis?listeNumerosLT=${trackingNumber}`,
+      'dpd': `https://tracking.dpd.de/status/fr_FR/parcel/${trackingNumber}`,
+      'gls': `https://gls-group.eu/FR/fr/suivi-colis?match=${trackingNumber}`,
+      'mondial-relay': `https://www.mondialrelay.fr/suivi-de-colis/?NumeroExpedition=${trackingNumber}`
+    };
+    
+    // Si le transporteur est connu, utiliser son URL
+    if (carrier && carriers[carrier.toLowerCase()]) {
+      return carriers[carrier.toLowerCase()];
+    }
+    
+    // Sinon, essayer de détecter le transporteur par le format du numéro
+    if (trackingNumber.match(/^1Z/)) return carriers.ups;
+    if (trackingNumber.match(/^[0-9]{12,22}$/)) return carriers.fedex;
+    if (trackingNumber.match(/^[0-9]{10}$/)) return carriers.colissimo;
+    if (trackingNumber.match(/^[A-Z]{2}[0-9]{9}FR$/)) return carriers.chronopost;
+    
+    // Par défaut, utiliser un service de suivi générique
+    return `https://www.aftership.com/track/${trackingNumber}`;
   }
 
   formatItemsGift(lineItems) {

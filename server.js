@@ -53,10 +53,15 @@ app.get('/', (req, res) => {
         method: 'GET',
         url: '/api/analyze-customer/Franck%20Cathus'
       },
-      webhookSetup: {
+      webhookOrderCreated: {
         method: 'POST',
         url: '/api/webhook/order-created',
-        description: 'Webhook Shopify pour synchronisation automatique'
+        description: 'Webhook Shopify pour nouvelles commandes'
+      },
+      webhookOrderFulfilled: {
+        method: 'POST',
+        url: '/api/webhook/order-fulfilled',
+        description: 'Webhook Shopify pour commandes expédiées (recommandé)'
       }
     }
   });
@@ -138,6 +143,38 @@ app.post('/api/webhook/order-created', async (req, res) => {
     }
   } catch (error) {
     console.error('❌ Erreur webhook:', error.message);
+    res.status(500).send('Error');
+  }
+});
+
+// Webhook pour les commandes expédiées (fulfillment)
+app.post('/api/webhook/order-fulfilled', async (req, res) => {
+  try {
+    console.log('🚚 Webhook reçu: commande expédiée');
+    
+    const fulfillment = JSON.parse(req.body);
+    console.log(`📦 Commande expédiée: ${fulfillment.order_id}`);
+    
+    // Récupérer la commande complète depuis Shopify
+    const order = await shopifyService.getOrder(fulfillment.order_id);
+    
+    if (order) {
+      // Synchroniser la commande avec toutes les informations
+      const syncResult = await orderSyncService.syncOrdersToSheets([order]);
+      
+      if (syncResult.successCount > 0) {
+        console.log(`✅ Commande ${order.name || order.id} synchronisée automatiquement après expédition`);
+        res.status(200).send('OK');
+      } else {
+        console.error(`❌ Échec de la synchronisation pour la commande ${order.name || order.id}`);
+        res.status(500).send('Sync failed');
+      }
+    } else {
+      console.error(`❌ Commande ${fulfillment.order_id} non trouvée`);
+      res.status(404).send('Order not found');
+    }
+  } catch (error) {
+    console.error('❌ Erreur webhook fulfillment:', error.message);
     res.status(500).send('Error');
   }
 });
