@@ -1,37 +1,22 @@
 const { google } = require('googleapis');
-const fs = require('fs');
 
-// Détecter l'environnement Railway
-const isRailway = process.env.RAILWAY_ENVIRONMENT === 'production' || 
-                  process.env.NODE_ENV === 'production' || 
-                  process.env.GOOGLE_SHEETS_CREDENTIALS; // Si cette variable existe, c'est Railway
-
-if (isRailway) {
-  // Utiliser le service Railway
-  module.exports = require('./googleSheetsServiceRailway');
-} else {
-  // Utiliser le service local
-  class GoogleSheetsService {
-    constructor() {
-      this.spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
-      this.credentialsFile = process.env.GOOGLE_SHEETS_CREDENTIALS_FILE || './credentials.json';
-      
-      if (!this.spreadsheetId) {
-        throw new Error('Configuration Google Sheets manquante. Vérifiez GOOGLE_SHEETS_SPREADSHEET_ID');
-      }
-      
-      this.auth = null;
-      this.sheets = null;
-      this.initAuth();
+class GoogleSheetsServiceRailway {
+  constructor() {
+    this.spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    this.credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
+    
+    if (!this.spreadsheetId || !this.credentialsJson) {
+      throw new Error('Configuration Google Sheets manquante pour Railway. Vérifiez GOOGLE_SHEETS_SPREADSHEET_ID et GOOGLE_SHEETS_CREDENTIALS');
     }
+    
+    this.auth = null;
+    this.sheets = null;
+    this.initAuth();
+  }
 
   initAuth() {
     try {
-      if (!fs.existsSync(this.credentialsFile)) {
-        throw new Error(`Fichier de credentials Google non trouvé: ${this.credentialsFile}`);
-      }
-
-      const credentials = JSON.parse(fs.readFileSync(this.credentialsFile, 'utf8'));
+      const credentials = JSON.parse(this.credentialsJson);
       
       this.auth = new google.auth.GoogleAuth({
         credentials,
@@ -40,7 +25,7 @@ if (isRailway) {
 
       this.sheets = google.sheets({ version: 'v4', auth: this.auth });
     } catch (error) {
-      throw new Error(`Erreur d'initialisation Google Sheets: ${error.message}`);
+      throw new Error(`Erreur d'initialisation Google Sheets Railway: ${error.message}`);
     }
   }
 
@@ -131,15 +116,14 @@ if (isRailway) {
     try {
       const data = await this.getSheetData();
       
-      // Rechercher la colonne "Numéro de commande" (colonne D, index 3)
       const orderColumnIndex = 3;
       
-      for (let i = 1; i < data.length; i++) { // Commencer à l'index 1 pour ignorer l'en-tête
+      for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (row && row[orderColumnIndex] === orderNumber) {
           return {
             found: true,
-            rowIndex: i + 1, // +1 car les index de Google Sheets commencent à 1
+            rowIndex: i + 1,
             rowData: row
           };
         }
@@ -154,28 +138,26 @@ if (isRailway) {
   async findRowsByName(customerName) {
     try {
       const data = await this.getSheetData();
-      const nameColumnIndex = 0; // Colonne A: Name
+      const nameColumnIndex = 0;
       
       const matchingRows = [];
       
-      for (let i = 1; i < data.length; i++) { // Commencer à l'index 1 pour ignorer l'en-tête
+      for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (row && row[nameColumnIndex] && row[nameColumnIndex].toLowerCase().trim() === customerName.toLowerCase().trim()) {
           matchingRows.push({
-            rowIndex: i + 1, // +1 car les index de Google Sheets commencent à 1
+            rowIndex: i + 1,
             rowData: row,
-            orderNumber: row[3] || '', // Colonne D: Numéro de commande
-            orderDate: row[3] ? this.extractOrderDate(row[3]) : null // Extraire la date du numéro de commande si possible
+            orderNumber: row[3] || '',
+            orderDate: row[3] ? this.extractOrderDate(row[3]) : null
           });
         }
       }
       
-      // Trier par numéro de commande (chronologique)
       matchingRows.sort((a, b) => {
         if (a.orderDate && b.orderDate) {
           return a.orderDate - b.orderDate;
         }
-        // Fallback: trier par numéro de commande
         return (a.orderNumber || '').localeCompare(b.orderNumber || '');
       });
       
@@ -186,14 +168,11 @@ if (isRailway) {
   }
 
   extractOrderDate(orderNumber) {
-    // Essayer d'extraire une date du numéro de commande
-    // Format attendu: #TCO12345 (les numéros plus élevés = plus récents)
     const match = orderNumber.match(/#TCO(\d+)/);
     if (match) {
       return parseInt(match[1]);
     }
     
-    // Fallback pour d'autres formats de numéros de commande
     const numberMatch = orderNumber.match(/(\d+)/);
     if (numberMatch) {
       return parseInt(numberMatch[1]);
@@ -213,8 +192,8 @@ if (isRailway) {
           rowIndex: order.rowIndex,
           orderNumber: order.orderNumber,
           orderDate: order.orderDate,
-          hasTracking: order.rowData[4] && order.rowData[4].trim() !== '', // Colonne E: Suivi de commande
-          hasItems: order.rowData[7] && order.rowData[7].trim() !== '' // Colonne H: ITEMS GIFT
+          hasTracking: order.rowData[4] && order.rowData[4].trim() !== '',
+          hasItems: order.rowData[7] && order.rowData[7].trim() !== ''
         })),
         chronologicalOrder: existingOrders.length > 1 ? 'sorted' : 'single'
       };
@@ -225,42 +204,17 @@ if (isRailway) {
     }
   }
 
-  async getNextAvailableRowForCustomer(customerName) {
-    try {
-      const existingRows = await this.findRowsByName(customerName);
-      
-      if (existingRows.length === 0) {
-        // Aucune commande existante pour ce client, ajouter à la fin
-        const data = await this.getSheetData();
-        return data.length + 1; // Prochaine ligne disponible
-      }
-      
-      // Trouver la position où insérer la nouvelle commande
-      // Les commandes existantes sont triées chronologiquement
-      // La nouvelle commande doit être insérée à la bonne position chronologique
-      
-      const data = await this.getSheetData();
-      const lastExistingRow = existingRows[existingRows.length - 1];
-      
-      // Si c'est la dernière commande chronologiquement, l'ajouter après la dernière ligne existante
-      return lastExistingRow.rowIndex + 1;
-    } catch (error) {
-      throw new Error(`Erreur lors de la recherche de position: ${error.message}`);
-    }
-  }
-
   async insertRowAtPosition(rowIndex, data) {
     try {
-      // Insérer une ligne vide à la position spécifiée
       await this.sheets.spreadsheets.batchUpdate({
         spreadsheetId: this.spreadsheetId,
         resource: {
           requests: [{
             insertDimension: {
               range: {
-                sheetId: 0, // Supposer la première feuille
+                sheetId: 0,
                 dimension: 'ROWS',
-                startIndex: rowIndex - 1, // -1 car l'API utilise des index 0-based
+                startIndex: rowIndex - 1,
                 endIndex: rowIndex
               },
               inheritFromBefore: false
@@ -269,7 +223,6 @@ if (isRailway) {
         }
       });
       
-      // Maintenant mettre à jour la ligne avec les données
       const result = await this.updateRow(rowIndex, data);
       
       return {
@@ -287,23 +240,20 @@ if (isRailway) {
     try {
       const { name, orderNumber, trackingNumber, itemsGift } = orderData;
       
-      // Format des données selon les colonnes du tableau
       const rowData = [
-        name,                    // Colonne A: Name
-        '',                      // Colonne B: Ig Link
-        '',                      // Colonne C: Contenus
-        orderNumber,             // Colonne D: Numéro de commande
-        trackingNumber,          // Colonne E: Suivi de commande
-        '',                      // Colonne F: Done (checkbox)
-        '',                      // Colonne G: Tiktok Link
-        itemsGift                // Colonne H: ITEMS GIFT
+        name,
+        '',
+        '',
+        orderNumber,
+        trackingNumber,
+        '',
+        '',
+        itemsGift
       ];
 
-      // Vérifier si la commande existe déjà
       const existingOrder = await this.findOrderRow(orderNumber);
       
       if (existingOrder.found) {
-        // Mettre à jour la ligne existante
         const result = await this.updateRow(existingOrder.rowIndex, rowData);
         return {
           success: true,
@@ -314,12 +264,10 @@ if (isRailway) {
           ...result
         };
       } else {
-        // Nouvelle commande - déterminer la position chronologique
         const existingCustomerOrders = await this.findRowsByName(name);
         const currentOrderDate = this.extractOrderDate(orderNumber);
         
         if (existingCustomerOrders.length === 0) {
-          // Premier client, ajouter à la fin
           const result = await this.appendRow(rowData);
           return {
             success: true,
@@ -330,22 +278,18 @@ if (isRailway) {
             ...result
           };
         } else {
-          // Client existant - insérer à la bonne position chronologique
           let insertPosition = null;
           
-          // Trouver la position chronologique correcte
           for (let i = 0; i < existingCustomerOrders.length; i++) {
             const existingOrderDate = existingCustomerOrders[i].orderDate;
             
             if (currentOrderDate && existingOrderDate && currentOrderDate <= existingOrderDate) {
-              // Insérer avant cette commande
               insertPosition = existingCustomerOrders[i].rowIndex;
               break;
             }
           }
           
           if (insertPosition) {
-            // Insérer à la position chronologique
             const result = await this.insertRowAtPosition(insertPosition, rowData);
             return {
               success: true,
@@ -356,7 +300,6 @@ if (isRailway) {
               ...result
             };
           } else {
-            // Ajouter après la dernière commande du client (plus récent)
             const lastCustomerRow = existingCustomerOrders[existingCustomerOrders.length - 1];
             const result = await this.insertRowAtPosition(lastCustomerRow.rowIndex + 1, rowData);
             return {
@@ -376,7 +319,6 @@ if (isRailway) {
   }
 
   extractRowFromRange(range) {
-    // Extraire le numéro de ligne d'une plage comme "A5:H5"
     const match = range.match(/A(\d+):/);
     return match ? parseInt(match[1]) : null;
   }
@@ -423,5 +365,4 @@ if (isRailway) {
   }
 }
 
-module.exports = new GoogleSheetsService();
-}
+module.exports = new GoogleSheetsServiceRailway();

@@ -67,6 +67,21 @@ Et qu'une nouvelle commande #TCO12000 arrive :
    npm install
    ```
 
+### Option 2 : Déploiement Railway (Recommandé pour production)
+
+Pour déployer sur Railway et avoir l'application qui fonctionne 24/7 :
+
+1. **Suivre le guide Railway** : Voir [RAILWAY-DEPLOY.md](./RAILWAY-DEPLOY.md)
+2. **Déploiement rapide** :
+   ```bash
+   # Installer Railway CLI
+   npm install -g @railway/cli
+   
+   # Se connecter et déployer
+   railway login
+   railway up
+   ```
+
 
 3. **Configuration Google Sheets API**
    - Aller sur [Google Cloud Console](https://console.cloud.google.com/)
