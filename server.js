@@ -178,6 +178,46 @@ app.get('/api/watching-status', async (req, res) => {
   }
 });
 
+// Debug endpoint to see what's in the sheets
+app.get('/api/debug-sheets', async (req, res) => {
+  try {
+    const data = await googleSheetsService.getSheetData();
+    
+    const debug = {
+      totalRows: data.length,
+      header: data[0] || [],
+      rows: []
+    };
+    
+    // Get first 5 data rows
+    for (let i = 1; i < Math.min(6, data.length); i++) {
+      const row = data[i];
+      debug.rows.push({
+        rowNumber: i + 1,
+        name: row[0] || '',
+        columnB: row[1] || '',
+        columnC: row[2] || '',
+        orderNumber: row[3] || '',
+        tracking: row[4] || '',
+        columnF: row[5] || '',
+        columnG: row[6] || '',
+        items: row[7] || '',
+        shouldProcess: !!(row[0] && row[0].trim() && (!row[3] || !row[4] || !row[7]))
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: debug
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Webhook pour les nouvelles commandes Shopify
 app.post('/api/webhook/order-created', async (req, res) => {
   try {
