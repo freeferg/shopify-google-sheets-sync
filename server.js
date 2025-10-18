@@ -189,20 +189,28 @@ app.get('/api/debug-sheets', async (req, res) => {
       rows: []
     };
     
-    // Get first 5 data rows
-    for (let i = 1; i < Math.min(6, data.length); i++) {
+    // Get first 10 data rows with correct column mapping
+    for (let i = 1; i < Math.min(11, data.length); i++) {
       const row = data[i];
       debug.rows.push({
         rowNumber: i + 1,
-        name: row[0] || '',
+        columnA: row[0] || '',
         columnB: row[1] || '',
         columnC: row[2] || '',
-        orderNumber: row[3] || '',
-        tracking: row[4] || '',
+        columnD_Name: row[3] || '',
+        columnE: row[4] || '',
         columnF: row[5] || '',
-        columnG: row[6] || '',
-        items: row[7] || '',
-        shouldProcess: !!(row[0] && row[0].trim() && (!row[3] || !row[4] || !row[7]))
+        columnG_OrderNumber: row[6] || '',
+        columnH_Tracking: row[7] || '',
+        columnI: row[8] || '',
+        columnJ: row[9] || '',
+        columnK: row[10] || '',
+        columnL_Items: row[11] || '',
+        hasName: !!(row[3] && row[3].trim()),
+        hasOrderNumber: !!(row[6] && row[6].trim()),
+        hasTracking: !!(row[7] && row[7].trim()),
+        hasItems: !!(row[11] && row[11].trim()),
+        shouldProcess: !!(row[3] && row[3].trim() && (!row[6] || !row[7] || !row[11]))
       });
     }
     
