@@ -125,19 +125,36 @@ class SheetsWatcherService {
 
   async fetchAndFillShopifyData(rowIndex, customerName, currentRow) {
     try {
-      console.log(`🔍 Recherche des commandes Shopify pour: ${customerName}`);
+      let order = null;
       
-      // Rechercher les commandes de ce client dans Shopify
-      const orders = await shopifyService.searchOrdersByCustomerName(customerName);
-      
-      if (orders.length === 0) {
-        console.log(`⚠️ Aucune commande trouvée pour: ${customerName}`);
-        return;
+      // Si un numéro de commande existe déjà (colonne G, index 6), l'utiliser directement
+      const existingOrderNumber = currentRow[6] && currentRow[6].trim();
+      if (existingOrderNumber && existingOrderNumber.startsWith('#TCO')) {
+        console.log(`🔍 Recherche de la commande par numéro: ${existingOrderNumber}`);
+        const orderId = existingOrderNumber.replace('#TCO', '');
+        try {
+          order = await shopifyService.getOrder(orderId);
+          console.log(`✓ Commande ${existingOrderNumber} trouvée par ID`);
+        } catch (error) {
+          console.log(`⚠️ Commande ${existingOrderNumber} non trouvée par ID, recherche par nom...`);
+        }
       }
       
-      // Prendre la commande la plus récente
-      const latestOrder = orders[0];
-      const formattedOrder = shopifyService.formatOrderForSheets(latestOrder);
+      // Si pas de commande trouvée par ID, chercher par nom
+      if (!order) {
+        console.log(`🔍 Recherche des commandes Shopify pour: ${customerName}`);
+        const orders = await shopifyService.searchOrdersByCustomerName(customerName);
+        
+        if (orders.length === 0) {
+          console.log(`⚠️ Aucune commande trouvée pour: ${customerName}`);
+          return;
+        }
+        
+        // Prendre la commande la plus récente
+        order = orders[0];
+      }
+      
+      const formattedOrder = shopifyService.formatOrderForSheets(order);
       
       // Préparer les nouvelles données - s'assurer que le tableau a la bonne taille
       const newRowData = [...currentRow];
