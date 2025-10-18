@@ -54,11 +54,25 @@ class SheetsWatcherService {
     try {
       const data = await googleSheetsService.getSheetData();
       
-      // Marquer toutes les lignes existantes comme déjà traitées
+      // Traiter les lignes existantes
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (row && row[0] && row[0].trim() !== '') {
-          this.lastProcessedRows.add(`${i}:${row[0]}`);
+          const rowKey = `${i}:${row[0]}`;
+          
+          // Vérifier si la ligne a déjà des informations complètes
+          const hasOrderNumber = row[3] && row[3].trim() !== '';
+          const hasTracking = row[4] && row[4].trim() !== '';
+          const hasItems = row[7] && row[7].trim() !== '';
+          
+          // Si la ligne n'est pas complète, la traiter
+          if (!hasOrderNumber || !hasTracking || !hasItems) {
+            console.log(`🔄 Traitement de la ligne existante ${i + 1}: ${row[0]}`);
+            await this.fetchAndFillShopifyData(i, row[0], row);
+          }
+          
+          // Marquer comme traitée
+          this.lastProcessedRows.add(rowKey);
         }
       }
       

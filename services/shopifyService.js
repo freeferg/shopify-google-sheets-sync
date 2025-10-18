@@ -126,6 +126,30 @@ class ShopifyService {
     }
   }
 
+  hasRequiredDiscountCodes(order) {
+    // Codes promo requis
+    const requiredCodes = ['J4Y4TC0G1FT', 'J4Y4TC0SH1P'];
+    
+    // Vérifier si la commande a des discount codes
+    if (!order.discount_codes || order.discount_codes.length === 0) {
+      return false;
+    }
+    
+    // Vérifier si au moins un des codes requis est présent
+    const orderCodes = order.discount_codes.map(dc => dc.code.toUpperCase());
+    const hasRequiredCode = requiredCodes.some(code => 
+      orderCodes.includes(code.toUpperCase())
+    );
+    
+    if (hasRequiredCode) {
+      console.log(`✅ Commande ${order.name} a un code promo valide: ${orderCodes.join(', ')}`);
+    } else {
+      console.log(`❌ Commande ${order.name} n'a pas de code promo valide. Codes trouvés: ${orderCodes.join(', ')}`);
+    }
+    
+    return hasRequiredCode;
+  }
+
   // Méthode pour formater les données de commande selon les besoins de Google Sheets
   formatOrderForSheets(order) {
     const shippingName = this.getShippingName(order);

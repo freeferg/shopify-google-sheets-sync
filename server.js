@@ -188,6 +188,13 @@ app.post('/api/webhook/order-created', async (req, res) => {
     
     console.log(`📦 Commande reçue: ${order.name || order.id}`);
     
+    // Vérifier si la commande a les codes promo requis
+    if (!shopifyService.hasRequiredDiscountCodes(order)) {
+      console.log(`⏭️ Commande ${order.name || order.id} ignorée: pas de code promo valide`);
+      res.status(200).send('OK - Ignored (no valid discount code)');
+      return;
+    }
+    
     // Synchroniser automatiquement la commande
     const syncResult = await orderSyncService.syncOrdersToSheets([order]);
     
@@ -216,6 +223,13 @@ app.post('/api/webhook/order-fulfilled', async (req, res) => {
     const order = await shopifyService.getOrder(fulfillment.order_id);
     
     if (order) {
+      // Vérifier si la commande a les codes promo requis
+      if (!shopifyService.hasRequiredDiscountCodes(order)) {
+        console.log(`⏭️ Commande ${order.name || order.id} ignorée: pas de code promo valide`);
+        res.status(200).send('OK - Ignored (no valid discount code)');
+        return;
+      }
+      
       // Synchroniser la commande avec toutes les informations
       const syncResult = await orderSyncService.syncOrdersToSheets([order]);
       
@@ -243,6 +257,13 @@ app.post('/api/webhook/order-updated', async (req, res) => {
     
     const order = JSON.parse(req.body);
     console.log(`📦 Commande mise à jour: ${order.name || order.id}`);
+    
+    // Vérifier si la commande a les codes promo requis
+    if (!shopifyService.hasRequiredDiscountCodes(order)) {
+      console.log(`⏭️ Commande ${order.name || order.id} ignorée: pas de code promo valide`);
+      res.status(200).send('OK - Ignored (no valid discount code)');
+      return;
+    }
     
     // Synchroniser la commande mise à jour
     const syncResult = await orderSyncService.syncOrdersToSheets([order]);
