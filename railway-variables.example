@@ -1,0 +1,21 @@
+# Variables d'environnement Railway
+# Copiez ce contenu dans Railway Dashboard > Variables
+
+# Shopify Configuration
+SHOPIFY_SHOP_DOMAIN=votre-boutique.myshopify.com
+SHOPIFY_ACCESS_TOKEN=shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Google Sheets Configuration
+GOOGLE_SHEETS_SPREADSHEET_ID=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms
+GOOGLE_SHEETS_CREDENTIALS={"type":"service_account","project_id":"mon-projet","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"..."}
+
+# Application Configuration
+NODE_ENV=production
+PORT=3000
+RAILWAY_ENVIRONMENT=production
+
+# Instructions:
+# 1. Remplacez les valeurs par vos vraies données
+# 2. Pour GOOGLE_SHEETS_CREDENTIALS, copiez tout le contenu du fichier JSON téléchargé
+# 3. Assurez-vous que tout est sur une seule ligne
+# 4. Ajoutez ces variables dans Railway Dashboard > Variables
