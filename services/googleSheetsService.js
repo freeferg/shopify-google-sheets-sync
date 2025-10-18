@@ -154,7 +154,7 @@ if (isRailway) {
   async findRowsByName(customerName) {
     try {
       const data = await this.getSheetData();
-      const nameColumnIndex = 0; // Colonne A: Name
+      const nameColumnIndex = 3; // Colonne D: Name
       
       const matchingRows = [];
       
@@ -164,8 +164,8 @@ if (isRailway) {
           matchingRows.push({
             rowIndex: i + 1, // +1 car les index de Google Sheets commencent à 1
             rowData: row,
-            orderNumber: row[3] || '', // Colonne D: Numéro de commande
-            orderDate: row[3] ? this.extractOrderDate(row[3]) : null // Extraire la date du numéro de commande si possible
+            orderNumber: row[6] || '', // Colonne G: Numéro de commande
+            orderDate: row[6] ? this.extractOrderDate(row[6]) : null // Extraire la date du numéro de commande si possible
           });
         }
       }

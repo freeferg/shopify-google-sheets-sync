@@ -57,18 +57,22 @@ class SheetsWatcherService {
       // Traiter les lignes existantes
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        if (row && row[0] && row[0].trim() !== '') {
-          const rowKey = `${i}:${row[0]}`;
+        // Colonne D (index 3) = Name
+        if (row && row[3] && row[3].trim() !== '') {
+          const rowKey = `${i}:${row[3]}`;
           
           // Vérifier si la ligne a déjà des informations complètes
-          const hasOrderNumber = row[3] && row[3].trim() !== '';
-          const hasTracking = row[4] && row[4].trim() !== '';
-          const hasItems = row[7] && row[7].trim() !== '';
+          // Colonne G (index 6) = Numéro de commande
+          // Colonne H (index 7) = Suivi de commande
+          // Colonne L (index 11) = Items gift
+          const hasOrderNumber = row[6] && row[6].trim() !== '';
+          const hasTracking = row[7] && row[7].trim() !== '';
+          const hasItems = row[11] && row[11].trim() !== '';
           
           // Si la ligne n'est pas complète, la traiter
           if (!hasOrderNumber || !hasTracking || !hasItems) {
-            console.log(`🔄 Traitement de la ligne existante ${i + 1}: ${row[0]}`);
-            await this.fetchAndFillShopifyData(i, row[0], row);
+            console.log(`🔄 Traitement de la ligne existante ${i + 1}: ${row[3]}`);
+            await this.fetchAndFillShopifyData(i, row[3], row);
           }
           
           // Marquer comme traitée
@@ -88,22 +92,26 @@ class SheetsWatcherService {
       
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        if (!row || !row[0] || row[0].trim() === '') continue;
+        // Colonne D (index 3) = Name
+        if (!row || !row[3] || row[3].trim() === '') continue;
         
-        const rowKey = `${i}:${row[0]}`;
+        const rowKey = `${i}:${row[3]}`;
         
         // Si cette ligne n'a pas été traitée
         if (!this.lastProcessedRows.has(rowKey)) {
-          console.log(`🆕 Nouveau nom détecté: ${row[0]} à la ligne ${i}`);
+          console.log(`🆕 Nouveau nom détecté: ${row[3]} à la ligne ${i + 1}`);
           
           // Vérifier si la ligne a déjà des informations complètes
-          const hasOrderNumber = row[3] && row[3].trim() !== '';
-          const hasTracking = row[4] && row[4].trim() !== '';
-          const hasItems = row[7] && row[7].trim() !== '';
+          // Colonne G (index 6) = Numéro de commande
+          // Colonne H (index 7) = Suivi de commande
+          // Colonne L (index 11) = Items gift
+          const hasOrderNumber = row[6] && row[6].trim() !== '';
+          const hasTracking = row[7] && row[7].trim() !== '';
+          const hasItems = row[11] && row[11].trim() !== '';
           
           // Si la ligne n'est pas complète, chercher les informations Shopify
           if (!hasOrderNumber || !hasTracking || !hasItems) {
-            await this.fetchAndFillShopifyData(i, row[0], row);
+            await this.fetchAndFillShopifyData(i, row[3], row);
           }
           
           // Marquer comme traitée
@@ -131,20 +139,26 @@ class SheetsWatcherService {
       const latestOrder = orders[0];
       const formattedOrder = shopifyService.formatOrderForSheets(latestOrder);
       
-      // Préparer les nouvelles données
+      // Préparer les nouvelles données - s'assurer que le tableau a la bonne taille
       const newRowData = [...currentRow];
-      
-      // Remplir les colonnes manquantes
-      if (!newRowData[3] || newRowData[3].trim() === '') {
-        newRowData[3] = formattedOrder.orderNumber; // Numéro de commande
+      while (newRowData.length < 12) {
+        newRowData.push('');
       }
       
-      if (!newRowData[4] || newRowData[4].trim() === '') {
-        newRowData[4] = formattedOrder.trackingNumber; // Suivi de commande
+      // Remplir les colonnes manquantes selon la nouvelle structure
+      // Colonne G (index 6) = Numéro de commande
+      if (!newRowData[6] || newRowData[6].trim() === '') {
+        newRowData[6] = formattedOrder.orderNumber;
       }
       
+      // Colonne H (index 7) = Suivi de commande
       if (!newRowData[7] || newRowData[7].trim() === '') {
-        newRowData[7] = formattedOrder.itemsGift; // ITEMS GIFT
+        newRowData[7] = formattedOrder.trackingNumber;
+      }
+      
+      // Colonne L (index 11) = Items gift
+      if (!newRowData[11] || newRowData[11].trim() === '') {
+        newRowData[11] = formattedOrder.itemsGift;
       }
       
       // Mettre à jour la ligne dans Google Sheets
