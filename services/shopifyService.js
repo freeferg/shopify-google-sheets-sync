@@ -140,12 +140,31 @@ class ShopifyService {
       // Si c'est un nom de commande (#TCOxxxxx), chercher dans toutes les commandes
       if (orderIdOrName.toString().startsWith('#')) {
         console.log(`🔍 Recherche de la commande par nom: ${orderIdOrName}`);
-        const data = await this.makeRequest(`/orders.json?limit=250&status=any&name=${encodeURIComponent(orderIdOrName)}`);
-        if (data.orders && data.orders.length > 0) {
-          console.log(`✓ Commande ${orderIdOrName} trouvée`);
-          return data.orders[0];
+        
+        // Chercher dans toutes les commandes récentes (plusieurs pages si nécessaire)
+        let allOrders = [];
+        let page = 1;
+        const limit = 250;
+        
+        // Chercher dans les 3 premières pages (750 commandes max)
+        while (page <= 3) {
+          const data = await this.makeRequest(`/orders.json?limit=${limit}&page=${page}&status=any`);
+          if (!data.orders || data.orders.length === 0) break;
+          
+          allOrders = allOrders.concat(data.orders);
+          
+          // Chercher si la commande est dans ce lot
+          const found = data.orders.find(o => o.name === orderIdOrName);
+          if (found) {
+            console.log(`✓ Commande ${orderIdOrName} trouvée (page ${page})`);
+            return found;
+          }
+          
+          if (data.orders.length < limit) break; // Dernière page
+          page++;
         }
-        throw new Error(`Commande ${orderIdOrName} non trouvée`);
+        
+        throw new Error(`Commande ${orderIdOrName} non trouvée dans les ${allOrders.length} dernières commandes`);
       }
       
       // Sinon, utiliser l'ID directement
