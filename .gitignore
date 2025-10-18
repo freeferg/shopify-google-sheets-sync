@@ -11,8 +11,8 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-# Google Sheets credentials
-credentials.json
+# Google Sheets credentials (à ajouter manuellement)
+# credentials.json
 
 # Logs
 logs

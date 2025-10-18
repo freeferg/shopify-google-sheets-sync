@@ -35,6 +35,7 @@ async function testConnections() {
     }
   } catch (error) {
     console.log('❌ Erreur de connexion Google Sheets:', error.message);
+    console.log('   Vérifiez que le fichier credentials.json est présent dans le répertoire racine');
   }
   
   console.log('\n🔧 Validation de la structure du tableau...');

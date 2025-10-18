@@ -1,29 +1,19 @@
 const { google } = require('googleapis');
 const fs = require('fs');
 
-// Détecter l'environnement Railway
-const isRailway = process.env.RAILWAY_ENVIRONMENT === 'production' || 
-                  process.env.NODE_ENV === 'production' || 
-                  process.env.GOOGLE_SHEETS_CREDENTIALS; // Si cette variable existe, c'est Railway
-
-if (isRailway) {
-  // Utiliser le service Railway
-  module.exports = require('./googleSheetsServiceRailway');
-} else {
-  // Utiliser le service local
-  class GoogleSheetsService {
-    constructor() {
-      this.spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
-      this.credentialsFile = process.env.GOOGLE_SHEETS_CREDENTIALS_FILE;
-      
-      if (!this.spreadsheetId || !this.credentialsFile) {
-        throw new Error('Configuration Google Sheets manquante. Vérifiez GOOGLE_SHEETS_SPREADSHEET_ID et GOOGLE_SHEETS_CREDENTIALS_FILE');
-      }
-      
-      this.auth = null;
-      this.sheets = null;
-      this.initAuth();
+class GoogleSheetsService {
+  constructor() {
+    this.spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    this.credentialsFile = process.env.GOOGLE_SHEETS_CREDENTIALS_FILE || './credentials.json';
+    
+    if (!this.spreadsheetId) {
+      throw new Error('Configuration Google Sheets manquante. Vérifiez GOOGLE_SHEETS_SPREADSHEET_ID');
     }
+    
+    this.auth = null;
+    this.sheets = null;
+    this.initAuth();
+  }
 
   initAuth() {
     try {

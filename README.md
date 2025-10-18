@@ -67,19 +67,6 @@ Et qu'une nouvelle commande #TCO12000 arrive :
    npm install
    ```
 
-### Option 2 : Déploiement Railway (Recommandé pour production)
-
-Pour déployer sur Railway et avoir l'application qui fonctionne 24/7 :
-
-1. **Suivre le guide complet** : Voir [DEPLOYMENT.md](./DEPLOYMENT.md)
-2. **Déploiement rapide** :
-   ```bash
-   # Installer Railway CLI
-   npm install -g @railway/cli
-   
-   # Exécuter le script de déploiement
-   ./scripts/deploy-railway.sh
-   ```
 
 3. **Configuration Google Sheets API**
    - Aller sur [Google Cloud Console](https://console.cloud.google.com/)
@@ -87,7 +74,7 @@ Pour déployer sur Railway et avoir l'application qui fonctionne 24/7 :
    - Activer l'API Google Sheets
    - Créer des identifiants de service (Service Account)
    - Télécharger le fichier JSON des identifiants
-   - Placer le fichier dans le dossier du projet et le renommer `credentials.json`
+   - **Placer le fichier dans le dossier du projet et le renommer `credentials.json`**
 
 4. **Configuration du tableau Google Sheets**
    - Créer un nouveau tableau Google Sheets
@@ -109,7 +96,6 @@ Pour déployer sur Railway et avoir l'application qui fonctionne 24/7 :
    SHOPIFY_ACCESS_TOKEN=your-access-token
    
    # Google Sheets Configuration
-   GOOGLE_SHEETS_CREDENTIALS_FILE=./credentials.json
    GOOGLE_SHEETS_SPREADSHEET_ID=your-spreadsheet-id
    
    # Application Configuration
