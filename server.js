@@ -343,6 +343,88 @@ app.post('/api/debug-process-row/:rowNumber', async (req, res) => {
   }
 });
 
+// Force update a specific row in Google Sheets
+app.post('/api/force-update-row/:rowNumber', async (req, res) => {
+  try {
+    const rowNumber = parseInt(req.params.rowNumber);
+    console.log(`🔄 Force update: Mise à jour forcée de la ligne ${rowNumber}`);
+    
+    const data = await googleSheetsService.getSheetData();
+    const rowIndex = rowNumber - 1;
+    const row = data[rowIndex];
+    
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        error: `Ligne ${rowNumber} non trouvée`
+      });
+    }
+    
+    const customerName = row[3];
+    if (!customerName || customerName.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: `Aucun nom dans la colonne D de la ligne ${rowNumber}`
+      });
+    }
+    
+    console.log(`🔍 Recherche Shopify pour: ${customerName}`);
+    
+    // Rechercher les commandes
+    const orders = await shopifyService.searchOrdersByCustomerName(customerName);
+    
+    if (orders.length === 0) {
+      return res.json({
+        success: false,
+        message: `Aucune commande trouvée pour ${customerName}`,
+        customerName,
+        foundOrders: 0
+      });
+    }
+    
+    const order = orders[0];
+    console.log(`✓ Commande trouvée: ${order.name}`);
+    
+    // Formater les données
+    const formattedOrder = shopifyService.formatOrderForSheets(order);
+    console.log(`📝 Données à écrire:`, formattedOrder);
+    
+    // Préparer les nouvelles données
+    const newRowData = [...row];
+    while (newRowData.length < 12) {
+      newRowData.push('');
+    }
+    
+    // Mettre à jour les colonnes spécifiques
+    newRowData[6] = formattedOrder.orderNumber;  // Colonne G - Numéro de commande
+    newRowData[7] = formattedOrder.trackingNumber;  // Colonne H - Suivi de commande  
+    newRowData[11] = formattedOrder.itemsGift;  // Colonne L - Items gift
+    
+    console.log(`📝 Nouvelles données ligne:`, newRowData);
+    
+    // Écrire dans Google Sheets
+    await googleSheetsService.updateRow(rowNumber, newRowData);
+    
+    console.log(`✅ Ligne ${rowNumber} mise à jour avec succès`);
+    
+    res.json({
+      success: true,
+      message: `Ligne ${rowNumber} mise à jour avec succès`,
+      customerName,
+      orderNumber: formattedOrder.orderNumber,
+      trackingNumber: formattedOrder.trackingNumber,
+      itemsGift: formattedOrder.itemsGift
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur force update:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Webhook pour les nouvelles commandes Shopify
 app.post('/api/webhook/order-created', async (req, res) => {
   try {
