@@ -763,7 +763,9 @@ app.post('/api/webhook/order-fulfilled', async (req, res) => {
   try {
     console.log('🚚 Webhook reçu: commande expédiée');
     
-    const fulfillment = JSON.parse(req.body);
+    // Parse le body (Buffer → Object)
+    const rawBody = req.body.toString('utf8');
+    const fulfillment = JSON.parse(rawBody);
     console.log(`📦 Commande expédiée: ${fulfillment.order_id}`);
     
     // Récupérer la commande complète depuis Shopify

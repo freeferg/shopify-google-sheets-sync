@@ -201,7 +201,16 @@ class ShopifyService {
 
       console.log(`📊 ${orders.length} commandes trouvées pour ${customerName}`);
       
-      return orders;
+      // Filtrer pour ne garder que les exact matches
+      const normalizedSearchName = customerName.toLowerCase().trim();
+      const exactMatches = orders.filter(order => {
+        const matchResult = this.isExactNameMatch(customerName, order);
+        return matchResult.isMatch;
+      });
+      
+      console.log(`✅ ${exactMatches.length} commandes avec exact match (sur ${orders.length} trouvées)`);
+      
+      return exactMatches;
     } catch (error) {
       console.error(`❌ Erreur GraphQL, fallback sur API REST: ${error.message}`);
       
