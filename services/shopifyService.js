@@ -176,9 +176,16 @@ class ShopifyService {
             title: itemEdge.node.title,
             quantity: itemEdge.node.quantity
           })),
-          fulfillments: order.fulfillments.map(fulfillment => ({
-            tracking_info: fulfillment.trackingInfo
-          }))
+          fulfillments: order.fulfillments.map(fulfillment => {
+            // Convertir trackingInfo vers le format REST attendu
+            const trackingInfo = fulfillment.trackingInfo && fulfillment.trackingInfo[0];
+            return {
+              tracking_number: trackingInfo ? trackingInfo.number : null,
+              tracking_company: trackingInfo ? trackingInfo.company : null,
+              tracking_url: trackingInfo ? trackingInfo.url : null,
+              tracking_info: fulfillment.trackingInfo // Garder aussi pour compatibilité
+            };
+          })
         };
       });
 
