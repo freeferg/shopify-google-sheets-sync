@@ -54,7 +54,7 @@ class GoogleSheetsServiceRailway {
     }
   }
 
-  async getSheetData(range = 'A:H') {
+  async getSheetData(range = 'A:L') {
     try {
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
