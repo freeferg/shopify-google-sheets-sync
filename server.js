@@ -396,6 +396,101 @@ app.get('/api/test-automatic-system', async (req, res) => {
   }
 });
 
+// Update all rows using existing order numbers for better efficiency
+app.post('/api/update-all-rows-with-orders', async (req, res) => {
+  try {
+    console.log('🔄 Mise à jour de toutes les lignes avec numéros de commande existants');
+    
+    const data = await googleSheetsService.getSheetData();
+    const results = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const rowNumber = i + 1;
+      
+      // Vérifier si la ligne a un nom et un numéro de commande
+      if (row && row[3] && row[3].trim() !== '' && row[6] && row[6].trim() !== '') {
+        const customerName = row[3];
+        const orderNumber = row[6];
+        
+        console.log(`🔍 Traitement ligne ${rowNumber}: ${customerName} - ${orderNumber}`);
+        
+        try {
+          // Utiliser le numéro de commande pour récupérer la commande Shopify
+          const order = await shopifyService.getOrder(orderNumber);
+          
+          if (order) {
+            const formattedOrder = shopifyService.formatOrderForSheets(order);
+            
+            // Préparer les nouvelles données
+            const newRowData = [...row];
+            while (newRowData.length < 12) {
+              newRowData.push('');
+            }
+            
+            // Mettre à jour les colonnes
+            newRowData[6] = formattedOrder.orderNumber;  // Colonne G - Numéro de commande
+            newRowData[7] = formattedOrder.trackingNumber;  // Colonne H - Suivi de commande  
+            newRowData[11] = formattedOrder.itemsGift;  // Colonne L - Items gift
+            
+            // Écrire dans Google Sheets avec l'URL de tracking
+            await googleSheetsService.updateRow(rowNumber, newRowData, formattedOrder.trackingUrl);
+            
+            results.push({
+              rowNumber,
+              customerName,
+              orderNumber,
+              success: true,
+              trackingNumber: formattedOrder.trackingNumber,
+              itemsGift: formattedOrder.itemsGift
+            });
+            
+            console.log(`✅ Ligne ${rowNumber} mise à jour: ${formattedOrder.trackingNumber}`);
+          } else {
+            results.push({
+              rowNumber,
+              customerName,
+              orderNumber,
+              success: false,
+              error: 'Commande non trouvée'
+            });
+          }
+        } catch (error) {
+          results.push({
+            rowNumber,
+            customerName,
+            orderNumber,
+            success: false,
+            error: error.message
+          });
+        }
+        
+        // Petite pause pour éviter de surcharger l'API
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    
+    res.json({
+      success: true,
+      message: `Traitement terminé: ${successCount} succès, ${failCount} échecs`,
+      totalRows: results.length,
+      successCount,
+      failCount,
+      results
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur mise à jour globale:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Force update a specific row in Google Sheets
 app.post('/api/force-update-row/:rowNumber', async (req, res) => {
   try {
