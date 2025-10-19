@@ -343,6 +343,59 @@ app.post('/api/debug-process-row/:rowNumber', async (req, res) => {
   }
 });
 
+// Test endpoint to simulate adding a new name and check automatic processing
+app.get('/api/test-automatic-system', async (req, res) => {
+  try {
+    console.log('🧪 Test du système automatique');
+    
+    // Vérifier le statut du watcher
+    const watcherStatus = sheetsWatcherService.getStatus();
+    
+    // Vérifier les données actuelles
+    const data = await googleSheetsService.getSheetData();
+    const rowsWithNames = [];
+    
+    for (let i = 1; i < Math.min(11, data.length); i++) {
+      const row = data[i];
+      if (row && row[3] && row[3].trim() !== '') {
+        const hasOrderNumber = row[6] && row[6].trim() !== '';
+        const hasTracking = row[7] && row[7].trim() !== '';
+        const hasItems = row[11] && row[11].trim() !== '';
+        
+        rowsWithNames.push({
+          rowNumber: i + 1,
+          name: row[3],
+          hasOrderNumber,
+          hasTracking,
+          hasItems,
+          isComplete: hasOrderNumber && hasTracking && hasItems
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Système automatique opérationnel',
+      watcherStatus,
+      totalRows: data.length,
+      rowsWithNames,
+      instructions: {
+        step1: 'Ajoutez un nom dans la colonne D d\'une ligne vide',
+        step2: 'L\'application détectera automatiquement le nouveau nom',
+        step3: 'Les colonnes G (commande), H (suivi), L (items) seront remplies automatiquement',
+        step4: 'Le traitement se fait toutes les 30 secondes'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur test système:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Force update a specific row in Google Sheets
 app.post('/api/force-update-row/:rowNumber', async (req, res) => {
   try {
