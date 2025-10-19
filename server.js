@@ -25,51 +25,32 @@ app.use('/api/webhook', express.raw({type: 'application/json'}));
 app.get('/', (req, res) => {
   res.json({
     message: 'Shopify Google Sheets Sync API',
-    version: '1.0.0',
+    version: '2.0.0',
+    mode: '📝 Manual Entry - Auto Fill',
+    howItWorks: [
+      '1. Users add NAMES manually to Google Sheets (column D)',
+      '2. App monitors Google Sheets every 30 seconds',
+      '3. When new name detected, app searches Shopify for matching order',
+      '4. Info auto-filled: order number, tracking, items',
+      '5. EXACT MATCH only (customer/shipping/billing name)'
+    ],
     features: [
-      'Synchronisation automatique des commandes Shopify vers Google Sheets',
-      'Surveillance en temps réel de Google Sheets pour nouveaux noms',
-      'Remplissage automatique des informations Shopify par nom de client',
-      'Gestion chronologique des commandes multiples par client',
-      'Mapping intelligent des articles selon notation spécifique',
-      'Validation de la structure du tableau Google Sheets'
+      '✅ Auto-monitoring of Google Sheets',
+      '✅ Auto-fill Shopify information',
+      '✅ Exact match only (no partial matches)',
+      '✅ Priority: customer → shipping → billing name',
+      '✅ Chronological order management',
+      '✅ Detailed logs in Railway',
+      '❌ Webhooks DISABLED (manual mode only)'
     ],
     endpoints: {
       testConnection: 'GET /api/test-connection',
-      getOrders: 'GET /api/orders?limit=10&status=any',
-      syncOrders: 'POST /api/sync-orders',
-      startWatching: 'POST /api/start-watching',
-      stopWatching: 'POST /api/stop-watching',
       watchingStatus: 'GET /api/watching-status',
-      analyzeCustomer: 'GET /api/analyze-customer/:customerName',
-      webhookOrderCreated: 'POST /api/webhook/order-created'
+      testSearch: 'GET /api/test-search/:customerName',
+      updateAllRows: 'POST /api/update-all-rows-with-orders',
+      forceReprocess: 'POST /api/force-reprocess'
     },
-    examples: {
-      syncRecentOrders: {
-        method: 'POST',
-        url: '/api/sync-orders',
-        body: { "limit": 10 }
-      },
-      syncSpecificOrders: {
-        method: 'POST',
-        url: '/api/sync-orders',
-        body: { "orderIds": ["#TCO10842", "#TCO10867"] }
-      },
-      analyzeCustomer: {
-        method: 'GET',
-        url: '/api/analyze-customer/Franck%20Cathus'
-      },
-      webhookOrderCreated: {
-        method: 'POST',
-        url: '/api/webhook/order-created',
-        description: 'Webhook Shopify pour nouvelles commandes'
-      },
-      webhookOrderFulfilled: {
-        method: 'POST',
-        url: '/api/webhook/order-fulfilled',
-        description: 'Webhook Shopify pour commandes expédiées (recommandé)'
-      }
-    }
+    webhooks: '❌ DISABLED - Users add names manually'
   });
 });
 
@@ -725,110 +706,29 @@ app.post('/api/force-update-row/:rowNumber', async (req, res) => {
   }
 });
 
-// Webhook pour les nouvelles commandes Shopify
+// ========================================
+// WEBHOOKS DÉSACTIVÉS
+// ========================================
+// Les utilisateurs doivent ajouter manuellement les noms dans Google Sheets.
+// L'application surveillera automatiquement Google Sheets et remplira les informations.
+// ========================================
+
+/*
+// Webhook pour les nouvelles commandes Shopify (DÉSACTIVÉ)
 app.post('/api/webhook/order-created', async (req, res) => {
-  try {
-    console.log('🔄 Webhook reçu: nouvelle commande créée');
-    
-    // Parser le JSON du webhook
-    const order = JSON.parse(req.body);
-    
-    console.log(`📦 Commande reçue: ${order.name || order.id}`);
-    
-    // Vérifier si la commande a les codes promo requis
-    if (!shopifyService.hasRequiredDiscountCodes(order)) {
-      console.log(`⏭️ Commande ${order.name || order.id} ignorée: pas de code promo valide`);
-      res.status(200).send('OK - Ignored (no valid discount code)');
-      return;
-    }
-    
-    // Synchroniser automatiquement la commande
-    const syncResult = await orderSyncService.syncOrdersToSheets([order]);
-    
-    if (syncResult.successCount > 0) {
-      console.log(`✅ Commande ${order.name || order.id} synchronisée automatiquement`);
-      res.status(200).send('OK');
-    } else {
-      console.error(`❌ Échec de la synchronisation pour la commande ${order.name || order.id}`);
-      res.status(500).send('Sync failed');
-    }
-  } catch (error) {
-    console.error('❌ Erreur webhook:', error.message);
-    res.status(500).send('Error');
-  }
+  res.status(200).send('Webhook disabled - Please add names manually to Google Sheets');
 });
 
-// Webhook pour les commandes expédiées (fulfillment)
+// Webhook pour les commandes expédiées (DÉSACTIVÉ)
 app.post('/api/webhook/order-fulfilled', async (req, res) => {
-  try {
-    console.log('🚚 Webhook reçu: commande expédiée');
-    
-    // Parse le body (Buffer → Object)
-    const rawBody = req.body.toString('utf8');
-    const fulfillment = JSON.parse(rawBody);
-    console.log(`📦 Commande expédiée: ${fulfillment.order_id}`);
-    
-    // Récupérer la commande complète depuis Shopify
-    const order = await shopifyService.getOrder(fulfillment.order_id);
-    
-    if (order) {
-      // Vérifier si la commande a les codes promo requis
-      if (!shopifyService.hasRequiredDiscountCodes(order)) {
-        console.log(`⏭️ Commande ${order.name || order.id} ignorée: pas de code promo valide`);
-        res.status(200).send('OK - Ignored (no valid discount code)');
-        return;
-      }
-      
-      // Synchroniser la commande avec toutes les informations
-      const syncResult = await orderSyncService.syncOrdersToSheets([order]);
-      
-      if (syncResult.successCount > 0) {
-        console.log(`✅ Commande ${order.name || order.id} synchronisée automatiquement après expédition`);
-        res.status(200).send('OK');
-      } else {
-        console.error(`❌ Échec de la synchronisation pour la commande ${order.name || order.id}`);
-        res.status(500).send('Sync failed');
-      }
-    } else {
-      console.error(`❌ Commande ${fulfillment.order_id} non trouvée`);
-      res.status(404).send('Order not found');
-    }
-  } catch (error) {
-    console.error('❌ Erreur webhook fulfillment:', error.message);
-    res.status(500).send('Error');
-  }
+  res.status(200).send('Webhook disabled - Please add names manually to Google Sheets');
 });
 
-// Webhook pour les mises à jour de commandes
+// Webhook pour les mises à jour de commandes (DÉSACTIVÉ)
 app.post('/api/webhook/order-updated', async (req, res) => {
-  try {
-    console.log('🔄 Webhook reçu: commande mise à jour');
-    
-    const order = JSON.parse(req.body);
-    console.log(`📦 Commande mise à jour: ${order.name || order.id}`);
-    
-    // Vérifier si la commande a les codes promo requis
-    if (!shopifyService.hasRequiredDiscountCodes(order)) {
-      console.log(`⏭️ Commande ${order.name || order.id} ignorée: pas de code promo valide`);
-      res.status(200).send('OK - Ignored (no valid discount code)');
-      return;
-    }
-    
-    // Synchroniser la commande mise à jour
-    const syncResult = await orderSyncService.syncOrdersToSheets([order]);
-    
-    if (syncResult.successCount > 0) {
-      console.log(`✅ Commande ${order.name || order.id} mise à jour automatiquement`);
-      res.status(200).send('OK');
-    } else {
-      console.error(`❌ Échec de la mise à jour pour la commande ${order.name || order.id}`);
-      res.status(500).send('Update failed');
-    }
-  } catch (error) {
-    console.error('❌ Erreur webhook update:', error.message);
-    res.status(500).send('Error');
-  }
+  res.status(200).send('Webhook disabled - Please add names manually to Google Sheets');
 });
+*/
 
 // Sync orders to Google Sheets
 app.post('/api/sync-orders', async (req, res) => {
