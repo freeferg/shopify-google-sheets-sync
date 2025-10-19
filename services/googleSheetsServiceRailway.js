@@ -96,7 +96,7 @@ class GoogleSheetsServiceRailway {
       const response = await this.sheets.spreadsheets.values.update({
         spreadsheetId: this.spreadsheetId,
         range,
-        valueInputOption: 'RAW',
+        valueInputOption: 'USER_ENTERED',
         resource: {
           values: [data]
         }
