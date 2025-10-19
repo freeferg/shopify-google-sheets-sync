@@ -95,12 +95,27 @@ class ShopifyService {
     try {
       console.log(`🔍 Recherche des commandes pour le client: ${customerName}`);
       
-      // Rechercher dans les commandes récentes (limite de 250)
-      const data = await this.makeRequest('/orders.json?limit=250&status=any');
-      const allOrders = data.orders || [];
-      
       // Normaliser le nom recherché
       const searchName = customerName.toLowerCase().trim();
+      
+      // Rechercher dans toutes les commandes récentes (plusieurs pages)
+      let allOrders = [];
+      let page = 1;
+      const limit = 250;
+      
+      // Chercher dans les 10 premières pages (2500 commandes max)
+      while (page <= 10) {
+        const data = await this.makeRequest(`/orders.json?limit=${limit}&page=${page}&status=any`);
+        if (!data.orders || data.orders.length === 0) break;
+        
+        allOrders = allOrders.concat(data.orders);
+        console.log(`  📄 Page ${page}: ${data.orders.length} commandes`);
+        
+        if (data.orders.length < limit) break; // Dernière page
+        page++;
+      }
+      
+      console.log(`  📊 Total commandes analysées: ${allOrders.length}`);
       
       // Filtrer les commandes par nom de client OU shipping name
       const matchingOrders = allOrders.filter(order => {
@@ -118,7 +133,7 @@ class ShopifyService {
         const customerMatch = customerName && (customerName.includes(searchName) || searchName.includes(customerName));
         
         if (shippingMatch || customerMatch) {
-          console.log(`  ✓ Match trouvé: shipping="${shippingName}", customer="${customerName}"`);
+          console.log(`  ✓ Match trouvé: ${order.name} - shipping="${shippingName}", customer="${customerName}"`);
         }
         
         return shippingMatch || customerMatch;
