@@ -114,11 +114,24 @@ class ShopifyService {
                 billingAddress {
                   name
                 }
+                discountCode
                 lineItems(first: 50) {
                   edges {
                     node {
                       title
                       quantity
+                      discountAllocations {
+                        allocatedAmountSet {
+                          shopMoney {
+                            amount
+                          }
+                        }
+                        discountApplication {
+                          ... on DiscountCodeApplication {
+                            code
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -163,6 +176,24 @@ class ShopifyService {
 
       const orders = data.data.orders.edges.map(edge => {
         const order = edge.node;
+        
+        // Extraire les codes de réduction des line items
+        const discountCodes = [];
+        if (order.lineItems && order.lineItems.edges) {
+          order.lineItems.edges.forEach(itemEdge => {
+            if (itemEdge.node.discountAllocations) {
+              itemEdge.node.discountAllocations.forEach(allocation => {
+                if (allocation.discountApplication && allocation.discountApplication.code) {
+                  const code = allocation.discountApplication.code;
+                  if (!discountCodes.includes(code)) {
+                    discountCodes.push(code);
+                  }
+                }
+              });
+            }
+          });
+        }
+        
         // Convertir au format REST pour compatibilité
         return {
           id: order.id,
@@ -182,6 +213,7 @@ class ShopifyService {
             first_name: order.billingAddress.name ? order.billingAddress.name.split(' ')[0] : '',
             last_name: order.billingAddress.name ? order.billingAddress.name.split(' ').slice(1).join(' ') : ''
           } : null,
+          discount_codes: discountCodes.map(code => ({ code })),
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
             quantity: itemEdge.node.quantity
@@ -201,14 +233,18 @@ class ShopifyService {
 
       console.log(`📊 ${orders.length} commandes trouvées pour ${customerName}`);
       
-      // Filtrer pour ne garder que les exact matches
+      // IMPORTANT: Filtrer d'abord par codes promo requis
+      const ordersWithPromo = orders.filter(order => this.hasRequiredDiscountCodes(order));
+      console.log(`🎟️ ${ordersWithPromo.length} commandes avec codes promo J4Y4TC0G1FT/J4Y4TC0SH1P (sur ${orders.length})`);
+      
+      // Ensuite filtrer pour ne garder que les exact matches
       const normalizedSearchName = customerName.toLowerCase().trim();
-      const exactMatches = orders.filter(order => {
+      const exactMatches = ordersWithPromo.filter(order => {
         const matchResult = this.isExactNameMatch(customerName, order);
         return matchResult.isMatch;
       });
       
-      console.log(`✅ ${exactMatches.length} commandes avec exact match (sur ${orders.length} trouvées)`);
+      console.log(`✅ ${exactMatches.length} commandes avec exact match ET codes promo (sur ${ordersWithPromo.length} avec promo)`);
       
       return exactMatches;
     } catch (error) {
@@ -316,6 +352,18 @@ class ShopifyService {
                       node {
                         title
                         quantity
+                        discountAllocations {
+                          allocatedAmountSet {
+                            shopMoney {
+                              amount
+                            }
+                          }
+                          discountApplication {
+                            ... on DiscountCodeApplication {
+                              code
+                            }
+                          }
+                        }
                       }
                     }
                   }
@@ -362,6 +410,23 @@ class ShopifyService {
 
         const order = orders[0].node;
         
+        // Extraire les codes de réduction des line items
+        const discountCodes = [];
+        if (order.lineItems && order.lineItems.edges) {
+          order.lineItems.edges.forEach(itemEdge => {
+            if (itemEdge.node.discountAllocations) {
+              itemEdge.node.discountAllocations.forEach(allocation => {
+                if (allocation.discountApplication && allocation.discountApplication.code) {
+                  const code = allocation.discountApplication.code;
+                  if (!discountCodes.includes(code)) {
+                    discountCodes.push(code);
+                  }
+                }
+              });
+            }
+          });
+        }
+        
         // Convertir au format REST  pour compatibilité
         return {
           id: order.id,
@@ -381,6 +446,7 @@ class ShopifyService {
             first_name: order.billingAddress.name ? order.billingAddress.name.split(' ')[0] : '',
             last_name: order.billingAddress.name ? order.billingAddress.name.split(' ').slice(1).join(' ') : ''
           } : null,
+          discount_codes: discountCodes.map(code => ({ code })),
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
             quantity: itemEdge.node.quantity
