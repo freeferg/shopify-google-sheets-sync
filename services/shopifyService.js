@@ -170,7 +170,9 @@ class ShopifyService {
             last_name: order.customer.lastName
           } : null,
           shipping_address: order.shippingAddress ? {
-            name: order.shippingAddress.name
+            name: order.shippingAddress.name,
+            first_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ')[0] : '',
+            last_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ').slice(1).join(' ') : ''
           } : null,
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
@@ -350,7 +352,9 @@ class ShopifyService {
             last_name: order.customer.lastName
           } : null,
           shipping_address: order.shippingAddress ? {
-            name: order.shippingAddress.name
+            name: order.shippingAddress.name,
+            first_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ')[0] : '',
+            last_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ').slice(1).join(' ') : ''
           } : null,
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
