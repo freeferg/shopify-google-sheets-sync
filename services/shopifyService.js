@@ -95,24 +95,134 @@ class ShopifyService {
     try {
       console.log(`🔍 Recherche des commandes pour le client: ${customerName}`);
       
+      // Utiliser l'API GraphQL pour rechercher par nom de client
+      const query = `
+        query searchOrdersByCustomer($query: String!) {
+          orders(first: 250, query: $query) {
+            edges {
+              node {
+                id
+                name
+                createdAt
+                customer {
+                  firstName
+                  lastName
+                }
+                shippingAddress {
+                  name
+                }
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      title
+                      quantity
+                    }
+                  }
+                }
+                fulfillments {
+                  trackingInfo {
+                    number
+                    url
+                    company
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      // Rechercher par nom de client avec l'API GraphQL
+      const graphqlQuery = `customer_name:${customerName}`;
+      
+      const response = await fetch(`https://${this.shopDomain}/admin/api/2024-01/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': this.accessToken,
+        },
+        body: JSON.stringify({
+          query,
+          variables: { query: graphqlQuery }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`GraphQL Error: ${response.status} - ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.errors) {
+        console.error('GraphQL Errors:', data.errors);
+        throw new Error(`GraphQL Errors: ${JSON.stringify(data.errors)}`);
+      }
+
+      const orders = data.data.orders.edges.map(edge => {
+        const order = edge.node;
+        // Convertir au format REST pour compatibilité
+        return {
+          id: order.id,
+          name: order.name,
+          created_at: order.createdAt,
+          customer: order.customer ? {
+            first_name: order.customer.firstName,
+            last_name: order.customer.lastName
+          } : null,
+          shipping_address: order.shippingAddress ? {
+            name: order.shippingAddress.name
+          } : null,
+          line_items: order.lineItems.edges.map(itemEdge => ({
+            title: itemEdge.node.title,
+            quantity: itemEdge.node.quantity
+          })),
+          fulfillments: order.fulfillments.map(fulfillment => ({
+            tracking_info: fulfillment.trackingInfo
+          }))
+        };
+      });
+
+      console.log(`📊 ${orders.length} commandes trouvées pour ${customerName}`);
+      
+      return orders;
+    } catch (error) {
+      console.error(`❌ Erreur GraphQL, fallback sur API REST: ${error.message}`);
+      
+      // Fallback sur l'API REST si GraphQL échoue
+      return await this.searchOrdersByCustomerNameREST(customerName);
+    }
+  }
+
+  async searchOrdersByCustomerNameREST(customerName) {
+    try {
+      console.log(`🔍 Fallback REST: Recherche des commandes pour le client: ${customerName}`);
+      
       // Normaliser le nom recherché
       const searchName = customerName.toLowerCase().trim();
       
       // Rechercher dans toutes les commandes récentes (plusieurs pages)
       let allOrders = [];
-      let page = 1;
+      let pageInfo = null;
       const limit = 250;
       
       // Chercher dans les 10 premières pages (2500 commandes max)
-      while (page <= 10) {
-        const data = await this.makeRequest(`/orders.json?limit=${limit}&page=${page}&status=any`);
+      let pageCount = 0;
+      while (pageCount < 10) {
+        let url = `/orders.json?limit=${limit}&status=any`;
+        if (pageInfo) {
+          url += `&page_info=${pageInfo}`;
+        }
+        
+        const data = await this.makeRequest(url);
         if (!data.orders || data.orders.length === 0) break;
         
         allOrders = allOrders.concat(data.orders);
-        console.log(`  📄 Page ${page}: ${data.orders.length} commandes`);
+        console.log(`  📄 Page ${pageCount + 1}: ${data.orders.length} commandes`);
         
-        if (data.orders.length < limit) break; // Dernière page
-        page++;
+        // Récupérer le page_info pour la page suivante
+        pageInfo = data.page_info;
+        if (!pageInfo || data.orders.length < limit) break; // Dernière page
+        pageCount++;
       }
       
       console.log(`  📊 Total commandes analysées: ${allOrders.length}`);
@@ -156,28 +266,36 @@ class ShopifyService {
       if (orderIdOrName.toString().startsWith('#')) {
         console.log(`🔍 Recherche de la commande par nom: ${orderIdOrName}`);
         
-        // Chercher dans toutes les commandes récentes (plusieurs pages si nécessaire)
-        let allOrders = [];
-        let page = 1;
-        const limit = 250;
-        
-        // Chercher dans les 10 premières pages (2500 commandes max)
-        while (page <= 10) {
-          const data = await this.makeRequest(`/orders.json?limit=${limit}&page=${page}&status=any`);
-          if (!data.orders || data.orders.length === 0) break;
+          // Chercher dans toutes les commandes récentes (plusieurs pages si nécessaire)
+          let allOrders = [];
+          let pageInfo = null;
+          const limit = 250;
           
-          allOrders = allOrders.concat(data.orders);
-          
-          // Chercher si la commande est dans ce lot
-          const found = data.orders.find(o => o.name === orderIdOrName);
-          if (found) {
-            console.log(`✓ Commande ${orderIdOrName} trouvée (page ${page})`);
-            return found;
+          // Chercher dans les 10 premières pages (2500 commandes max)
+          let pageCount = 0;
+          while (pageCount < 10) {
+            let url = `/orders.json?limit=${limit}&status=any`;
+            if (pageInfo) {
+              url += `&page_info=${pageInfo}`;
+            }
+            
+            const data = await this.makeRequest(url);
+            if (!data.orders || data.orders.length === 0) break;
+            
+            allOrders = allOrders.concat(data.orders);
+            
+            // Chercher si la commande est dans ce lot
+            const found = data.orders.find(o => o.name === orderIdOrName);
+            if (found) {
+              console.log(`✓ Commande ${orderIdOrName} trouvée (page ${pageCount + 1})`);
+              return found;
+            }
+            
+            // Récupérer le page_info pour la page suivante
+            pageInfo = data.page_info;
+            if (!pageInfo || data.orders.length < limit) break; // Dernière page
+            pageCount++;
           }
-          
-          if (data.orders.length < limit) break; // Dernière page
-          page++;
-        }
         
         throw new Error(`Commande ${orderIdOrName} non trouvée dans les ${allOrders.length} dernières commandes`);
       }
