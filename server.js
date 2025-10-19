@@ -455,8 +455,8 @@ app.post('/api/force-update-row/:rowNumber', async (req, res) => {
     
     console.log(`📝 Nouvelles données ligne:`, newRowData);
     
-    // Écrire dans Google Sheets
-    await googleSheetsService.updateRow(rowNumber, newRowData);
+    // Écrire dans Google Sheets avec l'URL de tracking
+    await googleSheetsService.updateRow(rowNumber, newRowData, formattedOrder.trackingUrl);
     
     console.log(`✅ Ligne ${rowNumber} mise à jour avec succès`);
     

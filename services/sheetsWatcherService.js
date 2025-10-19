@@ -177,8 +177,8 @@ class SheetsWatcherService {
         newRowData[11] = formattedOrder.itemsGift;
       }
       
-      // Mettre à jour la ligne dans Google Sheets
-      await googleSheetsService.updateRow(rowIndex + 1, newRowData);
+        // Mettre à jour la ligne dans Google Sheets avec l'URL de tracking
+        await googleSheetsService.updateRow(rowIndex + 1, newRowData, formattedOrder.trackingUrl);
       
       console.log(`✅ Ligne ${rowIndex + 1} mise à jour pour ${customerName}`);
       

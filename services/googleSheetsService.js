@@ -104,7 +104,7 @@ if (isRailway) {
     }
   }
 
-  async updateRow(rowIndex, data) {
+  async updateRow(rowIndex, data, trackingUrl = null) {
     try {
       // Utiliser batchUpdate pour créer des hyperlinks avec l'API Sheets
       const requests = [];
@@ -130,44 +130,35 @@ if (isRailway) {
         }
       });
       
-      // Ensuite, ajouter l'hyperlien pour la colonne H (index 7) si c'est un lien de tracking
+      // Ensuite, ajouter l'hyperlien pour la colonne H (index 7) si c'est un numéro de tracking
       const trackingValue = data[7]; // Colonne H
-      if (trackingValue && trackingValue.includes('http')) {
-        // Extraire l'URL et le texte du lien
-        const urlMatch = trackingValue.match(/https?:\/\/[^"]+/);
-        const textMatch = trackingValue.match(/"([^"]+)"/);
-        
-        if (urlMatch && textMatch) {
-          const url = urlMatch[0];
-          const text = textMatch[1];
-          
-          requests.push({
-            updateCells: {
-              range: {
-                sheetId: 0,
-                startRowIndex: rowIndex - 1,
-                endRowIndex: rowIndex,
-                startColumnIndex: 7, // Colonne H
-                endColumnIndex: 8
-              },
-              rows: [{
-                values: [{
-                  userEnteredValue: {
-                    stringValue: text
-                  },
-                  userEnteredFormat: {
-                    textFormat: {
-                      link: {
-                        uri: url
-                      }
+      if (trackingValue && trackingValue.trim() !== '' && trackingUrl) {
+        requests.push({
+          updateCells: {
+            range: {
+              sheetId: 0,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 7, // Colonne H
+              endColumnIndex: 8
+            },
+            rows: [{
+              values: [{
+                userEnteredValue: {
+                  stringValue: trackingValue
+                },
+                userEnteredFormat: {
+                  textFormat: {
+                    link: {
+                      uri: trackingUrl
                     }
                   }
-                }]
-              }],
-              fields: 'userEnteredValue,userEnteredFormat.textFormat.link'
-            }
-          });
-        }
+                }
+              }]
+            }],
+            fields: 'userEnteredValue,userEnteredFormat.textFormat.link'
+          }
+        });
       }
       
       const response = await this.sheets.spreadsheets.batchUpdate({
@@ -260,6 +251,44 @@ if (isRailway) {
     }
     
     return null;
+  }
+
+  generateTrackingUrlFromNumber(trackingNumber) {
+    // Générer l'URL de suivi basée sur le format du numéro
+    const number = trackingNumber.toString().toUpperCase();
+    
+    // Colis Privé (format: Q57000196112)
+    if (number.startsWith('Q') && number.length >= 10) {
+      return `https://colisprive.com/moncolis/pages/detailColis.aspx?numColis=${number}`;
+    }
+    
+    // La Poste / Colissimo (format numérique)
+    if (/^\d+$/.test(number) && number.length >= 10) {
+      return `https://www.laposte.fr/outils/suivre-vos-envois?code=${number}`;
+    }
+    
+    // Mondial Relay (format: 8DR123456)
+    if (/^[A-Z0-9]{6,12}$/.test(number)) {
+      return `https://www.mondialrelay.fr/suivi-de-colis/?NumeroExpedition=${number}`;
+    }
+    
+    // DPD (format: 1234567890)
+    if (/^\d{10,12}$/.test(number)) {
+      return `https://tracking.dpd.de/status/fr_FR/parcel/${number}`;
+    }
+    
+    // UPS (format: 1Z999AA1234567890)
+    if (number.startsWith('1Z') && number.length >= 18) {
+      return `https://www.ups.com/track?tracknum=${number}`;
+    }
+    
+    // FedEx (format: 123456789012)
+    if (/^\d{12,14}$/.test(number)) {
+      return `https://www.fedex.com/fedextrack/?trknbr=${number}`;
+    }
+    
+    // Par défaut, essayer Colis Privé
+    return `https://colisprive.com/moncolis/pages/detailColis.aspx?numColis=${number}`;
   }
 
   async analyzeCustomerOrders(customerName) {

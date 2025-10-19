@@ -344,12 +344,14 @@ class ShopifyService {
     const shippingName = this.getShippingName(order);
     const orderNumber = order.name || order.id.toString();
     const trackingNumber = this.getTrackingNumber(order);
+    const trackingUrl = this.getTrackingUrl(order);
     const itemsGift = this.formatItemsGift(order.line_items);
 
     return {
       name: shippingName,
       orderNumber: orderNumber,
       trackingNumber: trackingNumber,
+      trackingUrl: trackingUrl,
       itemsGift: itemsGift,
       rawOrder: order // Garder les données brutes pour debug
     };
@@ -373,13 +375,23 @@ class ShopifyService {
     if (order.fulfillments && order.fulfillments.length > 0) {
       const fulfillment = order.fulfillments[0];
       if (fulfillment.tracking_number) {
-        // Créer un lien cliquable vers le suivi
-        const trackingUrl = fulfillment.tracking_url || this.generateTrackingUrl(fulfillment.tracking_number, fulfillment.tracking_company);
-        return `=HYPERLINK("${trackingUrl}","${fulfillment.tracking_number}")`;
+        // Retourner juste le numéro de suivi, l'hyperlien sera créé par l'API Sheets
+        return fulfillment.tracking_number;
       }
     }
     
     return '';
+  }
+
+  getTrackingUrl(order) {
+    if (order.fulfillments && order.fulfillments.length > 0) {
+      const fulfillment = order.fulfillments[0];
+      if (fulfillment.tracking_number) {
+        return fulfillment.tracking_url || this.generateTrackingUrl(fulfillment.tracking_number, fulfillment.tracking_company);
+      }
+    }
+    
+    return null;
   }
 
   generateTrackingUrl(trackingNumber, carrier = '') {

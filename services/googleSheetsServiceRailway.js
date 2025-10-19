@@ -89,7 +89,7 @@ class GoogleSheetsServiceRailway {
     }
   }
 
-  async updateRow(rowIndex, data) {
+  async updateRow(rowIndex, data, trackingUrl = null) {
     try {
       // Utiliser batchUpdate pour créer des hyperlinks avec l'API Sheets
       const requests = [];
@@ -115,44 +115,35 @@ class GoogleSheetsServiceRailway {
         }
       });
       
-      // Ensuite, ajouter l'hyperlien pour la colonne H (index 7) si c'est un lien de tracking
+      // Ensuite, ajouter l'hyperlien pour la colonne H (index 7) si c'est un numéro de tracking
       const trackingValue = data[7]; // Colonne H
-      if (trackingValue && trackingValue.includes('http')) {
-        // Extraire l'URL et le texte du lien
-        const urlMatch = trackingValue.match(/https?:\/\/[^"]+/);
-        const textMatch = trackingValue.match(/"([^"]+)"/);
-        
-        if (urlMatch && textMatch) {
-          const url = urlMatch[0];
-          const text = textMatch[1];
-          
-          requests.push({
-            updateCells: {
-              range: {
-                sheetId: 0,
-                startRowIndex: rowIndex - 1,
-                endRowIndex: rowIndex,
-                startColumnIndex: 7, // Colonne H
-                endColumnIndex: 8
-              },
-              rows: [{
-                values: [{
-                  userEnteredValue: {
-                    stringValue: text
-                  },
-                  userEnteredFormat: {
-                    textFormat: {
-                      link: {
-                        uri: url
-                      }
+      if (trackingValue && trackingValue.trim() !== '' && trackingUrl) {
+        requests.push({
+          updateCells: {
+            range: {
+              sheetId: 0,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 7, // Colonne H
+              endColumnIndex: 8
+            },
+            rows: [{
+              values: [{
+                userEnteredValue: {
+                  stringValue: trackingValue
+                },
+                userEnteredFormat: {
+                  textFormat: {
+                    link: {
+                      uri: trackingUrl
                     }
                   }
-                }]
-              }],
-              fields: 'userEnteredValue,userEnteredFormat.textFormat.link'
-            }
-          });
-        }
+                }
+              }]
+            }],
+            fields: 'userEnteredValue,userEnteredFormat.textFormat.link'
+          }
+        });
       }
       
       const response = await this.sheets.spreadsheets.batchUpdate({
