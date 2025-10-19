@@ -420,6 +420,24 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
           const order = await shopifyService.getOrder(orderNumber);
           
           if (order) {
+            // Vérifier que le nom du client correspond exactement
+            const orderCustomerName = shopifyService.getShippingName(order);
+            const normalizedCustomerName = customerName.toLowerCase().trim();
+            const normalizedOrderName = orderCustomerName.toLowerCase().trim();
+            
+            // Vérifier la correspondance exacte
+            if (normalizedCustomerName !== normalizedOrderName) {
+              console.log(`⚠️ Nom ne correspond pas: "${customerName}" vs "${orderCustomerName}" pour ${orderNumber}`);
+              results.push({
+                rowNumber,
+                customerName,
+                orderNumber,
+                success: false,
+                error: `Nom ne correspond pas: "${customerName}" vs "${orderCustomerName}"`
+              });
+              continue;
+            }
+            
             const formattedOrder = shopifyService.formatOrderForSheets(order);
             
             // Préparer les nouvelles données
@@ -442,10 +460,11 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
               orderNumber,
               success: true,
               trackingNumber: formattedOrder.trackingNumber,
-              itemsGift: formattedOrder.itemsGift
+              itemsGift: formattedOrder.itemsGift,
+              orderCustomerName: orderCustomerName
             });
             
-            console.log(`✅ Ligne ${rowNumber} mise à jour: ${formattedOrder.trackingNumber}`);
+            console.log(`✅ Ligne ${rowNumber} mise à jour: ${formattedOrder.trackingNumber} (${orderCustomerName})`);
           } else {
             results.push({
               rowNumber,
