@@ -269,42 +269,103 @@ class ShopifyService {
 
   async getOrder(orderIdOrName) {
     try {
-      // Si c'est un nom de commande (#TCOxxxxx), chercher dans toutes les commandes
+      // Si c'est un nom de commande (#TCOxxxxx), utiliser l'API GraphQL
       if (orderIdOrName.toString().startsWith('#')) {
         console.log(`🔍 Recherche de la commande par nom: ${orderIdOrName}`);
         
-          // Chercher dans toutes les commandes récentes (plusieurs pages si nécessaire)
-          let allOrders = [];
-          let pageInfo = null;
-          const limit = 250;
-          
-          // Chercher dans les 10 premières pages (2500 commandes max)
-          let pageCount = 0;
-          while (pageCount < 10) {
-            let url = `/orders.json?limit=${limit}&status=any`;
-            if (pageInfo) {
-              url += `&page_info=${pageInfo}`;
+        // Utiliser l'API GraphQL pour chercher par nom de commande
+        const query = `
+          query getOrderByName($query: String!) {
+            orders(first: 1, query: $query) {
+              edges {
+                node {
+                  id
+                  name
+                  createdAt
+                  customer {
+                    firstName
+                    lastName
+                  }
+                  shippingAddress {
+                    name
+                  }
+                  lineItems(first: 50) {
+                    edges {
+                      node {
+                        title
+                        quantity
+                      }
+                    }
+                  }
+                  fulfillments {
+                    trackingInfo {
+                      number
+                      url
+                      company
+                    }
+                  }
+                }
+              }
             }
-            
-            const data = await this.makeRequest(url);
-            if (!data.orders || data.orders.length === 0) break;
-            
-            allOrders = allOrders.concat(data.orders);
-            
-            // Chercher si la commande est dans ce lot
-            const found = data.orders.find(o => o.name === orderIdOrName);
-            if (found) {
-              console.log(`✓ Commande ${orderIdOrName} trouvée (page ${pageCount + 1})`);
-              return found;
-            }
-            
-            // Récupérer le page_info pour la page suivante
-            pageInfo = data.page_info;
-            if (!pageInfo || data.orders.length < limit) break; // Dernière page
-            pageCount++;
           }
+        `;
+
+        const response = await fetch(`https://${this.shopDomain}/admin/api/2024-01/graphql.json`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': this.accessToken,
+          },
+          body: JSON.stringify({
+            query,
+            variables: { query: `name:${orderIdOrName}` }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`GraphQL Error: ${response.status} - ${response.statusText}`);
+        }
+
+        const data = await response.json();
         
-        throw new Error(`Commande ${orderIdOrName} non trouvée dans les ${allOrders.length} dernières commandes`);
+        if (data.errors) {
+          console.error('GraphQL Errors:', data.errors);
+          throw new Error(`GraphQL Errors: ${JSON.stringify(data.errors)}`);
+        }
+
+        const orders = data.data.orders.edges;
+        if (orders.length === 0) {
+          throw new Error(`Commande ${orderIdOrName} non trouvée`);
+        }
+
+        const order = orders[0].node;
+        
+        // Convertir au format REST  pour compatibilité
+        return {
+          id: order.id,
+          name: order.name,
+          created_at: order.createdAt,
+          customer: order.customer ? {
+            first_name: order.customer.firstName,
+            last_name: order.customer.lastName
+          } : null,
+          shipping_address: order.shippingAddress ? {
+            name: order.shippingAddress.name
+          } : null,
+          line_items: order.lineItems.edges.map(itemEdge => ({
+            title: itemEdge.node.title,
+            quantity: itemEdge.node.quantity
+          })),
+          fulfillments: order.fulfillments.map(fulfillment => {
+            const trackingInfo = fulfillment.trackingInfo && fulfillment.trackingInfo[0];
+            return {
+              tracking_number: trackingInfo ? trackingInfo.number : null,
+              tracking_company: trackingInfo ? trackingInfo.company : null,
+              tracking_url: trackingInfo ? trackingInfo.url : null,
+              tracking_info: fulfillment.trackingInfo
+            };
+          })
+        };
       }
       
       // Sinon, utiliser l'ID directement
