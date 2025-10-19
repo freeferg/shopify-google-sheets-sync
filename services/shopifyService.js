@@ -111,6 +111,9 @@ class ShopifyService {
                 shippingAddress {
                   name
                 }
+                billingAddress {
+                  name
+                }
                 lineItems(first: 50) {
                   edges {
                     node {
@@ -173,6 +176,11 @@ class ShopifyService {
             name: order.shippingAddress.name,
             first_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ')[0] : '',
             last_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ').slice(1).join(' ') : ''
+          } : null,
+          billing_address: order.billingAddress ? {
+            name: order.billingAddress.name,
+            first_name: order.billingAddress.name ? order.billingAddress.name.split(' ')[0] : '',
+            last_name: order.billingAddress.name ? order.billingAddress.name.split(' ').slice(1).join(' ') : ''
           } : null,
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
@@ -291,6 +299,9 @@ class ShopifyService {
                   shippingAddress {
                     name
                   }
+                  billingAddress {
+                    name
+                  }
                   lineItems(first: 50) {
                     edges {
                       node {
@@ -355,6 +366,11 @@ class ShopifyService {
             name: order.shippingAddress.name,
             first_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ')[0] : '',
             last_name: order.shippingAddress.name ? order.shippingAddress.name.split(' ').slice(1).join(' ') : ''
+          } : null,
+          billing_address: order.billingAddress ? {
+            name: order.billingAddress.name,
+            first_name: order.billingAddress.name ? order.billingAddress.name.split(' ')[0] : '',
+            last_name: order.billingAddress.name ? order.billingAddress.name.split(' ').slice(1).join(' ') : ''
           } : null,
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
@@ -434,6 +450,46 @@ class ShopifyService {
     }
     
     return 'N/A';
+  }
+
+  // Obtenir tous les noms possibles d'une commande
+  getAllOrderNames(order) {
+    const names = {};
+    
+    // Nom du client
+    if (order.customer) {
+      names.customer = `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim();
+    }
+    
+    // Nom d'expédition
+    if (order.shipping_address) {
+      names.shipping = `${order.shipping_address.first_name || ''} ${order.shipping_address.last_name || ''}`.trim();
+    }
+    
+    // Nom de facturation
+    if (order.billing_address) {
+      names.billing = `${order.billing_address.first_name || ''} ${order.billing_address.last_name || ''}`.trim();
+    }
+    
+    return names;
+  }
+
+  // Vérifier si le nom correspond exactement à l'un des noms de la commande
+  isExactNameMatch(customerName, order) {
+    const normalizedCustomerName = customerName.toLowerCase().trim();
+    const orderNames = this.getAllOrderNames(order);
+    
+    const matches = {
+      customer: orderNames.customer && orderNames.customer.toLowerCase().trim() === normalizedCustomerName,
+      shipping: orderNames.shipping && orderNames.shipping.toLowerCase().trim() === normalizedCustomerName,
+      billing: orderNames.billing && orderNames.billing.toLowerCase().trim() === normalizedCustomerName
+    };
+    
+    return {
+      isMatch: matches.customer || matches.shipping || matches.billing,
+      matchType: matches.customer ? 'customer' : (matches.shipping ? 'shipping' : (matches.billing ? 'billing' : null)),
+      orderNames: orderNames
+    };
   }
 
   getTrackingNumber(order) {

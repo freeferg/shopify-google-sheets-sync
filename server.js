@@ -424,46 +424,80 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
             order = await shopifyService.getOrder(orderNumber);
             
             if (order) {
-              // Vérifier que le nom du client correspond exactement
-              const orderCustomerName = shopifyService.getShippingName(order);
-              const normalizedCustomerName = customerName.toLowerCase().trim();
-              const normalizedOrderName = orderCustomerName.toLowerCase().trim();
+              // Vérifier la correspondance exacte avec tous les types de noms
+              const matchResult = shopifyService.isExactNameMatch(customerName, order);
               
-              // Si les noms ne correspondent pas, chercher par nom
-              if (normalizedCustomerName !== normalizedOrderName) {
-                console.log(`⚠️ Nom ne correspond pas: "${customerName}" vs "${orderCustomerName}" pour ${orderNumber}`);
+              // Si pas de correspondance exacte, chercher par nom
+              if (!matchResult.isMatch) {
+                const orderNames = matchResult.orderNames;
+                console.log(`⚠️ ❌ AUCUN MATCH EXACT pour "${customerName}" avec ${orderNumber}`);
+                console.log(`   Customer: ${orderNames.customer || 'N/A'}`);
+                console.log(`   Shipping: ${orderNames.shipping || 'N/A'}`);
+                console.log(`   Billing: ${orderNames.billing || 'N/A'}`);
                 console.log(`🔍 Recherche par nom: ${customerName}`);
                 
                 // Chercher par nom de client
                 const ordersByName = await shopifyService.searchOrdersByCustomerName(customerName);
                 if (ordersByName.length > 0) {
-                  // Trouver la commande avec le nom le plus exact
-                  const normalizedCustomerName = customerName.toLowerCase().trim();
-                  let bestMatch = ordersByName[0];
-                  let bestScore = 0;
+                  console.log(`📋 ${ordersByName.length} commandes trouvées, recherche du match exact...`);
                   
+                  // Trouver une commande avec correspondance EXACTE en priorité : customer → shipping → billing
+                  let exactMatch = null;
+                  let matchType = null;
+                  
+                  // Priorité 1: chercher un match avec le nom client
                   for (const orderCandidate of ordersByName) {
-                    const orderCustomerName = shopifyService.getShippingName(orderCandidate);
-                    const normalizedOrderName = orderCustomerName.toLowerCase().trim();
-                    
-                    // Calculer un score de correspondance
-                    let score = 0;
-                    if (normalizedCustomerName === normalizedOrderName) {
-                      score = 100; // Correspondance exacte
-                    } else if (normalizedCustomerName.includes(normalizedOrderName) || normalizedOrderName.includes(normalizedCustomerName)) {
-                      score = 50; // Correspondance partielle
-                    }
-                    
-                    if (score > bestScore) {
-                      bestScore = score;
-                      bestMatch = orderCandidate;
+                    const candidateMatchResult = shopifyService.isExactNameMatch(customerName, orderCandidate);
+                    if (candidateMatchResult.isMatch && candidateMatchResult.matchType === 'customer') {
+                      exactMatch = orderCandidate;
+                      matchType = 'customer';
+                      console.log(`✅ MATCH EXACT trouvé (customer): ${orderCandidate.name}`);
+                      break;
                     }
                   }
                   
-                  order = bestMatch;
-                  correctOrderNumber = order.name;
-                  console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName} (score: ${bestScore})`);
+                  // Priorité 2: si pas de match customer, chercher un match avec le nom d'expédition
+                  if (!exactMatch) {
+                    for (const orderCandidate of ordersByName) {
+                      const candidateMatchResult = shopifyService.isExactNameMatch(customerName, orderCandidate);
+                      if (candidateMatchResult.isMatch && candidateMatchResult.matchType === 'shipping') {
+                        exactMatch = orderCandidate;
+                        matchType = 'shipping';
+                        console.log(`✅ MATCH EXACT trouvé (shipping): ${orderCandidate.name}`);
+                        break;
+                      }
+                    }
+                  }
+                  
+                  // Priorité 3: si toujours pas de match, chercher un match avec le nom de facturation
+                  if (!exactMatch) {
+                    for (const orderCandidate of ordersByName) {
+                      const candidateMatchResult = shopifyService.isExactNameMatch(customerName, orderCandidate);
+                      if (candidateMatchResult.isMatch && candidateMatchResult.matchType === 'billing') {
+                        exactMatch = orderCandidate;
+                        matchType = 'billing';
+                        console.log(`✅ MATCH EXACT trouvé (billing): ${orderCandidate.name}`);
+                        break;
+                      }
+                    }
+                  }
+                  
+                  if (exactMatch) {
+                    order = exactMatch;
+                    correctOrderNumber = order.name;
+                  } else {
+                    console.log(`❌ AUCUN MATCH EXACT trouvé parmi les ${ordersByName.length} commandes`);
+                    results.push({
+                      rowNumber,
+                      customerName,
+                      orderNumber,
+                      success: false,
+                      error: `Aucun match exact trouvé pour "${customerName}"`
+                    });
+                    continue;
+                  }
                 } else {
+                  console.log(`❌ Aucune commande trouvée pour "${customerName}"`);
                   results.push({
                     rowNumber,
                     customerName,
@@ -473,6 +507,8 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
                   });
                   continue;
                 }
+              } else {
+                console.log(`✅ MATCH EXACT: ${customerName} = ${orderNumber} (type: ${matchResult.matchType})`);
               }
             }
           } catch (orderError) {
@@ -481,32 +517,55 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
             // Si erreur avec le numéro, chercher par nom
             const ordersByName = await shopifyService.searchOrdersByCustomerName(customerName);
             if (ordersByName.length > 0) {
-              // Trouver la commande avec le nom le plus exact
-              const normalizedCustomerName = customerName.toLowerCase().trim();
-              let bestMatch = ordersByName[0];
-              let bestScore = 0;
+              console.log(`📋 ${ordersByName.length} commandes trouvées, recherche du match exact...`);
               
+              // Trouver une commande avec correspondance EXACTE en priorité : customer → shipping → billing
+              let exactMatch = null;
+              let matchType = null;
+              
+              // Priorité 1: chercher un match avec le nom client
               for (const orderCandidate of ordersByName) {
-                const orderCustomerName = shopifyService.getShippingName(orderCandidate);
-                const normalizedOrderName = orderCustomerName.toLowerCase().trim();
-                
-                // Calculer un score de correspondance
-                let score = 0;
-                if (normalizedCustomerName === normalizedOrderName) {
-                  score = 100; // Correspondance exacte
-                } else if (normalizedCustomerName.includes(normalizedOrderName) || normalizedOrderName.includes(normalizedCustomerName)) {
-                  score = 50; // Correspondance partielle
-                }
-                
-                if (score > bestScore) {
-                  bestScore = score;
-                  bestMatch = orderCandidate;
+                const candidateMatchResult = shopifyService.isExactNameMatch(customerName, orderCandidate);
+                if (candidateMatchResult.isMatch && candidateMatchResult.matchType === 'customer') {
+                  exactMatch = orderCandidate;
+                  matchType = 'customer';
+                  console.log(`✅ MATCH EXACT trouvé (customer): ${orderCandidate.name}`);
+                  break;
                 }
               }
               
-              order = bestMatch;
-              correctOrderNumber = order.name;
-              console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName} (score: ${bestScore})`);
+              // Priorité 2: si pas de match customer, chercher un match avec le nom d'expédition
+              if (!exactMatch) {
+                for (const orderCandidate of ordersByName) {
+                  const candidateMatchResult = shopifyService.isExactNameMatch(customerName, orderCandidate);
+                  if (candidateMatchResult.isMatch && candidateMatchResult.matchType === 'shipping') {
+                    exactMatch = orderCandidate;
+                    matchType = 'shipping';
+                    console.log(`✅ MATCH EXACT trouvé (shipping): ${orderCandidate.name}`);
+                    break;
+                  }
+                }
+              }
+              
+              // Priorité 3: si toujours pas de match, chercher un match avec le nom de facturation
+              if (!exactMatch) {
+                for (const orderCandidate of ordersByName) {
+                  const candidateMatchResult = shopifyService.isExactNameMatch(customerName, orderCandidate);
+                  if (candidateMatchResult.isMatch && candidateMatchResult.matchType === 'billing') {
+                    exactMatch = orderCandidate;
+                    matchType = 'billing';
+                    console.log(`✅ MATCH EXACT trouvé (billing): ${orderCandidate.name}`);
+                    break;
+                  }
+                }
+              }
+              
+              if (exactMatch) {
+                order = exactMatch;
+                correctOrderNumber = order.name;
+              } else {
+                console.log(`❌ AUCUN MATCH EXACT trouvé parmi les ${ordersByName.length} commandes`);
+              }
             }
           }
           
