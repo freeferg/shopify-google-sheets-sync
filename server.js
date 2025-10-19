@@ -274,6 +274,75 @@ app.get('/api/test-search/:customerName', async (req, res) => {
   }
 });
 
+// Debug endpoint to manually process a specific row
+app.post('/api/debug-process-row/:rowNumber', async (req, res) => {
+  try {
+    const rowNumber = parseInt(req.params.rowNumber);
+    console.log(`🧪 Debug: Traitement manuel de la ligne ${rowNumber}`);
+    
+    const data = await googleSheetsService.getSheetData();
+    const rowIndex = rowNumber - 1;
+    const row = data[rowIndex];
+    
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        error: `Ligne ${rowNumber} non trouvée`
+      });
+    }
+    
+    const customerName = row[3];
+    if (!customerName || customerName.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: `Aucun nom dans la colonne D de la ligne ${rowNumber}`
+      });
+    }
+    
+    console.log(`🔍 Recherche pour: ${customerName}`);
+    
+    // Test de recherche
+    const orders = await shopifyService.searchOrdersByCustomerName(customerName);
+    console.log(`📊 Commandes trouvées: ${orders.length}`);
+    
+    if (orders.length === 0) {
+      return res.json({
+        success: true,
+        message: `Aucune commande trouvée pour ${customerName}`,
+        customerName,
+        foundOrders: 0
+      });
+    }
+    
+    const order = orders[0];
+    console.log(`✓ Commande trouvée: ${order.name}`);
+    
+    // Test de formatage
+    const formattedOrder = shopifyService.formatOrderForSheets(order);
+    console.log(`📝 Données formatées:`, formattedOrder);
+    
+    res.json({
+      success: true,
+      message: `Traitement réussi pour ${customerName}`,
+      customerName,
+      foundOrders: orders.length,
+      selectedOrder: {
+        name: order.name,
+        customerName: order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'N/A',
+        created_at: order.created_at
+      },
+      formattedData: formattedOrder
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur debug:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Webhook pour les nouvelles commandes Shopify
 app.post('/api/webhook/order-created', async (req, res) => {
   try {
