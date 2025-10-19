@@ -106,7 +106,7 @@ if (isRailway) {
 
   async updateRow(rowIndex, data) {
     try {
-      const range = `A${rowIndex}:H${rowIndex}`;
+      const range = `A${rowIndex}:L${rowIndex}`;
       
       const response = await this.sheets.spreadsheets.values.update({
         spreadsheetId: this.spreadsheetId,
