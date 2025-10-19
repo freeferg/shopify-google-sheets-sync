@@ -416,28 +416,55 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
         console.log(`🔍 Traitement ligne ${rowNumber}: ${customerName} - ${orderNumber}`);
         
         try {
-          // Utiliser le numéro de commande pour récupérer la commande Shopify
-          const order = await shopifyService.getOrder(orderNumber);
+          let order = null;
+          let correctOrderNumber = orderNumber;
+          
+          // D'abord, essayer avec le numéro de commande existant
+          try {
+            order = await shopifyService.getOrder(orderNumber);
+            
+            if (order) {
+              // Vérifier que le nom du client correspond exactement
+              const orderCustomerName = shopifyService.getShippingName(order);
+              const normalizedCustomerName = customerName.toLowerCase().trim();
+              const normalizedOrderName = orderCustomerName.toLowerCase().trim();
+              
+              // Si les noms ne correspondent pas, chercher par nom
+              if (normalizedCustomerName !== normalizedOrderName) {
+                console.log(`⚠️ Nom ne correspond pas: "${customerName}" vs "${orderCustomerName}" pour ${orderNumber}`);
+                console.log(`🔍 Recherche par nom: ${customerName}`);
+                
+                // Chercher par nom de client
+                const ordersByName = await shopifyService.searchOrdersByCustomerName(customerName);
+                if (ordersByName.length > 0) {
+                  order = ordersByName[0]; // Prendre la commande la plus récente
+                  correctOrderNumber = order.name;
+                  console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName}`);
+                } else {
+                  results.push({
+                    rowNumber,
+                    customerName,
+                    orderNumber,
+                    success: false,
+                    error: `Aucune commande trouvée pour "${customerName}"`
+                  });
+                  continue;
+                }
+              }
+            }
+          } catch (orderError) {
+            console.log(`⚠️ Erreur avec ${orderNumber}, recherche par nom: ${customerName}`);
+            
+            // Si erreur avec le numéro, chercher par nom
+            const ordersByName = await shopifyService.searchOrdersByCustomerName(customerName);
+            if (ordersByName.length > 0) {
+              order = ordersByName[0]; // Prendre la commande la plus récente
+              correctOrderNumber = order.name;
+              console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName}`);
+            }
+          }
           
           if (order) {
-            // Vérifier que le nom du client correspond exactement
-            const orderCustomerName = shopifyService.getShippingName(order);
-            const normalizedCustomerName = customerName.toLowerCase().trim();
-            const normalizedOrderName = orderCustomerName.toLowerCase().trim();
-            
-            // Vérifier la correspondance exacte
-            if (normalizedCustomerName !== normalizedOrderName) {
-              console.log(`⚠️ Nom ne correspond pas: "${customerName}" vs "${orderCustomerName}" pour ${orderNumber}`);
-              results.push({
-                rowNumber,
-                customerName,
-                orderNumber,
-                success: false,
-                error: `Nom ne correspond pas: "${customerName}" vs "${orderCustomerName}"`
-              });
-              continue;
-            }
-            
             const formattedOrder = shopifyService.formatOrderForSheets(order);
             
             // Préparer les nouvelles données
@@ -447,7 +474,7 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
             }
             
             // Mettre à jour les colonnes
-            newRowData[6] = formattedOrder.orderNumber;  // Colonne G - Numéro de commande
+            newRowData[6] = formattedOrder.orderNumber;  // Colonne G - Numéro de commande (corrigé)
             newRowData[7] = formattedOrder.trackingNumber;  // Colonne H - Suivi de commande  
             newRowData[11] = formattedOrder.itemsGift;  // Colonne L - Items gift
             
@@ -457,14 +484,15 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
             results.push({
               rowNumber,
               customerName,
-              orderNumber,
+              originalOrderNumber: orderNumber,
+              correctOrderNumber: correctOrderNumber,
               success: true,
               trackingNumber: formattedOrder.trackingNumber,
               itemsGift: formattedOrder.itemsGift,
-              orderCustomerName: orderCustomerName
+              orderCustomerName: shopifyService.getShippingName(order)
             });
             
-            console.log(`✅ Ligne ${rowNumber} mise à jour: ${formattedOrder.trackingNumber} (${orderCustomerName})`);
+            console.log(`✅ Ligne ${rowNumber} mise à jour: ${formattedOrder.trackingNumber} (${correctOrderNumber})`);
           } else {
             results.push({
               rowNumber,
