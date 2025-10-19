@@ -26,8 +26,18 @@ L'application surveille automatiquement votre Google Sheets et remplit les infor
 
 ---
 
-## ⚠️ IMPORTANT - Correspondance EXACTE uniquement
+## ⚠️ IMPORTANT - Règles de filtrage
 
+L'application applique **deux filtres essentiels** :
+
+### 🎟️ 1. Codes promo requis
+Seules les commandes avec les codes promo suivants sont prises en compte :
+- `J4Y4TC0G1FT`
+- `J4Y4TC0SH1P`
+
+**Les commandes sans ces codes promo sont ignorées, même si le nom correspond.**
+
+### ✅ 2. Correspondance EXACTE du nom
 L'application cherche une **correspondance EXACTE** du nom dans Shopify :
 
 ### ✅ Exemples qui fonctionnent :
