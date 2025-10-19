@@ -146,8 +146,8 @@ class ShopifyService {
         let page = 1;
         const limit = 250;
         
-        // Chercher dans les 3 premières pages (750 commandes max)
-        while (page <= 3) {
+        // Chercher dans les 10 premières pages (2500 commandes max)
+        while (page <= 10) {
           const data = await this.makeRequest(`/orders.json?limit=${limit}&page=${page}&status=any`);
           if (!data.orders || data.orders.length === 0) break;
           
