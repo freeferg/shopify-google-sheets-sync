@@ -91,21 +91,81 @@ class GoogleSheetsServiceRailway {
 
   async updateRow(rowIndex, data) {
     try {
-      const range = `A${rowIndex}:L${rowIndex}`;
+      // Utiliser batchUpdate pour créer des hyperlinks avec l'API Sheets
+      const requests = [];
       
-      const response = await this.sheets.spreadsheets.values.update({
+      // D'abord, mettre à jour toutes les valeurs
+      requests.push({
+        updateCells: {
+          range: {
+            sheetId: 0, // Première feuille
+            startRowIndex: rowIndex - 1,
+            endRowIndex: rowIndex,
+            startColumnIndex: 0,
+            endColumnIndex: data.length
+          },
+          rows: [{
+            values: data.map((value, index) => ({
+              userEnteredValue: {
+                stringValue: value
+              }
+            }))
+          }],
+          fields: 'userEnteredValue'
+        }
+      });
+      
+      // Ensuite, ajouter l'hyperlien pour la colonne H (index 7) si c'est un lien de tracking
+      const trackingValue = data[7]; // Colonne H
+      if (trackingValue && trackingValue.includes('http')) {
+        // Extraire l'URL et le texte du lien
+        const urlMatch = trackingValue.match(/https?:\/\/[^"]+/);
+        const textMatch = trackingValue.match(/"([^"]+)"/);
+        
+        if (urlMatch && textMatch) {
+          const url = urlMatch[0];
+          const text = textMatch[1];
+          
+          requests.push({
+            updateCells: {
+              range: {
+                sheetId: 0,
+                startRowIndex: rowIndex - 1,
+                endRowIndex: rowIndex,
+                startColumnIndex: 7, // Colonne H
+                endColumnIndex: 8
+              },
+              rows: [{
+                values: [{
+                  userEnteredValue: {
+                    stringValue: text
+                  },
+                  userEnteredFormat: {
+                    textFormat: {
+                      link: {
+                        uri: url
+                      }
+                    }
+                  }
+                }]
+              }],
+              fields: 'userEnteredValue,userEnteredFormat.textFormat.link'
+            }
+          });
+        }
+      }
+      
+      const response = await this.sheets.spreadsheets.batchUpdate({
         spreadsheetId: this.spreadsheetId,
-        range,
-        valueInputOption: 'USER_ENTERED',
         resource: {
-          values: [data]
+          requests: requests
         }
       });
       
       return {
         success: true,
-        updatedRange: response.data.updatedRange,
-        updatedRows: response.data.updatedRows
+        updatedRange: `A${rowIndex}:L${rowIndex}`,
+        updatedRows: 1
       };
     } catch (error) {
       throw new Error(`Erreur lors de la mise à jour de la ligne ${rowIndex}: ${error.message}`);
