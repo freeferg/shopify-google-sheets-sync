@@ -437,9 +437,32 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
                 // Chercher par nom de client
                 const ordersByName = await shopifyService.searchOrdersByCustomerName(customerName);
                 if (ordersByName.length > 0) {
-                  order = ordersByName[0]; // Prendre la commande la plus récente
+                  // Trouver la commande avec le nom le plus exact
+                  const normalizedCustomerName = customerName.toLowerCase().trim();
+                  let bestMatch = ordersByName[0];
+                  let bestScore = 0;
+                  
+                  for (const orderCandidate of ordersByName) {
+                    const orderCustomerName = shopifyService.getShippingName(orderCandidate);
+                    const normalizedOrderName = orderCustomerName.toLowerCase().trim();
+                    
+                    // Calculer un score de correspondance
+                    let score = 0;
+                    if (normalizedCustomerName === normalizedOrderName) {
+                      score = 100; // Correspondance exacte
+                    } else if (normalizedCustomerName.includes(normalizedOrderName) || normalizedOrderName.includes(normalizedCustomerName)) {
+                      score = 50; // Correspondance partielle
+                    }
+                    
+                    if (score > bestScore) {
+                      bestScore = score;
+                      bestMatch = orderCandidate;
+                    }
+                  }
+                  
+                  order = bestMatch;
                   correctOrderNumber = order.name;
-                  console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName}`);
+                  console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName} (score: ${bestScore})`);
                 } else {
                   results.push({
                     rowNumber,
@@ -458,9 +481,32 @@ app.post('/api/update-all-rows-with-orders', async (req, res) => {
             // Si erreur avec le numéro, chercher par nom
             const ordersByName = await shopifyService.searchOrdersByCustomerName(customerName);
             if (ordersByName.length > 0) {
-              order = ordersByName[0]; // Prendre la commande la plus récente
+              // Trouver la commande avec le nom le plus exact
+              const normalizedCustomerName = customerName.toLowerCase().trim();
+              let bestMatch = ordersByName[0];
+              let bestScore = 0;
+              
+              for (const orderCandidate of ordersByName) {
+                const orderCustomerName = shopifyService.getShippingName(orderCandidate);
+                const normalizedOrderName = orderCustomerName.toLowerCase().trim();
+                
+                // Calculer un score de correspondance
+                let score = 0;
+                if (normalizedCustomerName === normalizedOrderName) {
+                  score = 100; // Correspondance exacte
+                } else if (normalizedCustomerName.includes(normalizedOrderName) || normalizedOrderName.includes(normalizedCustomerName)) {
+                  score = 50; // Correspondance partielle
+                }
+                
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestMatch = orderCandidate;
+                }
+              }
+              
+              order = bestMatch;
               correctOrderNumber = order.name;
-              console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName}`);
+              console.log(`✅ Commande trouvée par nom: ${correctOrderNumber} pour ${customerName} (score: ${bestScore})`);
             }
           }
           
