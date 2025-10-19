@@ -246,6 +246,34 @@ app.get('/api/debug-sheets', async (req, res) => {
   }
 });
 
+// Test endpoint to search for a specific customer name
+app.get('/api/test-search/:customerName', async (req, res) => {
+  try {
+    const customerName = decodeURIComponent(req.params.customerName);
+    console.log(`🧪 Test de recherche pour: ${customerName}`);
+    
+    const orders = await shopifyService.searchOrdersByCustomerName(customerName);
+    
+    res.json({
+      success: true,
+      customerName,
+      foundOrders: orders.length,
+      orders: orders.map(order => ({
+        name: order.name,
+        shippingName: shopifyService.getShippingName(order),
+        customerName: order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'N/A',
+        lineItems: order.line_items ? order.line_items.length : 0,
+        created_at: order.created_at
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Webhook pour les nouvelles commandes Shopify
 app.post('/api/webhook/order-created', async (req, res) => {
   try {
