@@ -120,6 +120,13 @@ class ShopifyService {
                     node {
                       title
                       quantity
+                      variant {
+                        title
+                        selectedOptions {
+                          name
+                          value
+                        }
+                      }
                       discountAllocations {
                         allocatedAmountSet {
                           shopMoney {
@@ -216,7 +223,11 @@ class ShopifyService {
           discount_codes: discountCodes.map(code => ({ code })),
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
-            quantity: itemEdge.node.quantity
+            quantity: itemEdge.node.quantity,
+            variant: itemEdge.node.variant ? {
+              title: itemEdge.node.variant.title,
+              selectedOptions: itemEdge.node.variant.selectedOptions || []
+            } : null
           })),
           fulfillments: order.fulfillments.map(fulfillment => {
             // Convertir trackingInfo vers le format REST attendu
@@ -352,6 +363,13 @@ class ShopifyService {
                       node {
                         title
                         quantity
+                        variant {
+                          title
+                          selectedOptions {
+                            name
+                            value
+                          }
+                        }
                         discountAllocations {
                           allocatedAmountSet {
                             shopMoney {
@@ -449,7 +467,11 @@ class ShopifyService {
           discount_codes: discountCodes.map(code => ({ code })),
           line_items: order.lineItems.edges.map(itemEdge => ({
             title: itemEdge.node.title,
-            quantity: itemEdge.node.quantity
+            quantity: itemEdge.node.quantity,
+            variant: itemEdge.node.variant ? {
+              title: itemEdge.node.variant.title,
+              selectedOptions: itemEdge.node.variant.selectedOptions || []
+            } : null
           })),
           fulfillments: order.fulfillments.map(fulfillment => {
             const trackingInfo = fulfillment.trackingInfo && fulfillment.trackingInfo[0];
@@ -625,6 +647,7 @@ class ShopifyService {
       const productTitle = item.title.toLowerCase();
       let itemCode = '';
       let color = '';
+      let size = '';
       
       // Mapping selon la notation spécifiée
       if (productTitle.includes('débardeur') || productTitle.includes('debardeur')) {
@@ -643,8 +666,19 @@ class ShopifyService {
         }
       }
       
+      // Extraire la taille depuis les variantes
+      if (item.variant && item.variant.selectedOptions) {
+        const sizeOption = item.variant.selectedOptions.find(option => 
+          option.name && option.name.toLowerCase().includes('size') || 
+          option.name && option.name.toLowerCase().includes('taille')
+        );
+        if (sizeOption && sizeOption.value) {
+          size = sizeOption.value.toUpperCase();
+        }
+      }
+      
       if (itemCode) {
-        const key = `${itemCode} ${color}`.trim();
+        const key = size ? `${itemCode} ${color} ${size}`.trim() : `${itemCode} ${color}`.trim();
         itemMap[key] = (itemMap[key] || 0) + item.quantity;
       }
     });
