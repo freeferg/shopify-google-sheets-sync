@@ -754,6 +754,18 @@ app.post('/api/reorganize-orders-chronologically', async (req, res) => {
     const sheetsData = await googleSheetsService.getSheetData();
     const header = sheetsData[0]; // Garder l'en-tête
     
+    // Créer un Map pour lier les commandes Shopify aux lignes existantes
+    const existingRowsMap = new Map();
+    for (let i = 1; i < sheetsData.length; i++) {
+      const row = sheetsData[i];
+      const orderNum = row[6]; // Colonne G - Numéro de commande
+      if (orderNum && orderNum.trim()) {
+        existingRowsMap.set(orderNum.trim(), row);
+      }
+    }
+    
+    console.log(`📊 ${existingRowsMap.size} commandes existantes trouvées dans le Sheets`);
+    
     // 4. Créer les nouvelles données dans l'ordre chronologique
     const newRows = [header]; // Commencer avec l'en-tête
     
@@ -763,19 +775,22 @@ app.post('/api/reorganize-orders-chronologically', async (req, res) => {
       
       const formattedOrder = shopifyService.formatOrderForSheets(order);
       
-      // Créer la ligne complète (colonnes A à L)
-      const rowData = [];
-      rowData[0] = ''; // A: ?
-      rowData[1] = ''; // B: ?
-      rowData[2] = ''; // C: ?
+      // Vérifier si la commande existe déjà dans le Sheets
+      let rowData;
+      if (existingRowsMap.has(order.name)) {
+        // Récupérer la ligne existante et la mettre à jour
+        rowData = [...existingRowsMap.get(order.name)];
+        console.log(`🔄 EXISTANTE: ${order.name} - mise à jour des colonnes D, G, H, L`);
+      } else {
+        // Nouvelle commande - créer une nouvelle ligne
+        rowData = Array(12).fill(''); // Créer un tableau de 12 colonnes vides
+        console.log(`✨ NOUVELLE: ${order.name}`);
+      }
+      
+      // Mettre à jour les colonnes spécifiques (D, G, H, L)
       rowData[3] = shippingName; // D: Name
-      rowData[4] = ''; // E: ?
-      rowData[5] = ''; // F: ?
       rowData[6] = formattedOrder.orderNumber; // G: Numéro de commande
       rowData[7] = formattedOrder.trackingNumber; // H: Suivi de commande
-      rowData[8] = ''; // I: ?
-      rowData[9] = ''; // J: ?
-      rowData[10] = ''; // K: ?
       rowData[11] = formattedOrder.itemsGift; // L: Items gift
       
       newRows.push(rowData);
