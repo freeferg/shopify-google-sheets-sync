@@ -873,13 +873,12 @@ app.post('/api/find-and-insert-missing-orders', async (req, res) => {
     
     res.json({
       success: true,
-      message: `Réorganisation terminée: ${insertedOrders.length} nouvelles commandes insérées, ${allOrdersSorted.length} commandes au total (ordre chronologique)`,
+      message: `${insertedOrders.length} commandes insérées dans l'ordre chronologique`,
       totalPromoOrders: allPromoOrders.length,
       existingOrders: existingOrderNumbers.size,
       missingOrders: missingOrders.length,
       insertedOrders: insertedOrders,
-      totalOrders: allOrdersSorted.length,
-      orders: allOrdersSorted.map(o => o.name)
+      totalOrders: allPromoOrders.length
     });
     
   } catch (error) {
