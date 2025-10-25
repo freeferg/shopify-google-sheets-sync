@@ -706,7 +706,132 @@ app.post('/api/force-update-row/:rowNumber', async (req, res) => {
   }
 });
 
-// Find and insert missing orders with promo codes
+// Reorganize all orders in chronological order
+app.post('/api/reorganize-orders-chronologically', async (req, res) => {
+  try {
+    console.log('🔄 Réorganisation de TOUTES les commandes dans l\'ordre chronologique...');
+    
+    // 1. Récupérer TOUTES les commandes avec codes promo depuis Shopify
+    let allPromoOrders = [];
+    let pageInfo = null;
+    let page = 0;
+    
+    while (page < 20) {
+      console.log(`📄 Récupération page ${page + 1}...`);
+      
+      let url = '/orders.json?limit=250&status=any';
+      if (pageInfo) url += `&page_info=${pageInfo}`;
+      
+      const data = await shopifyService.makeRequest(url);
+      if (!data.orders || data.orders.length === 0) break;
+      
+      const requiredCodes = ['J4Y4TC0G1FT', 'J4Y4TC0SH1P'];
+      const promoOrders = data.orders.filter(order => {
+        if (order.discount_codes && Array.isArray(order.discount_codes)) {
+          return order.discount_codes.some(dc => requiredCodes.includes(dc.code));
+        }
+        return false;
+      });
+      
+      allPromoOrders = allPromoOrders.concat(promoOrders);
+      console.log(`   → ${promoOrders.length}/${data.orders.length} avec codes promo (Total: ${allPromoOrders.length})`);
+      
+      pageInfo = data.page_info;
+      if (!pageInfo || data.orders.length < 250) break;
+      page++;
+    }
+    
+    // 2. Trier par numéro de commande
+    allPromoOrders.sort((a, b) => {
+      const numA = parseInt(a.name.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+      const numB = parseInt(b.name.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+      return numA - numB;
+    });
+    
+    console.log(`\n📋 ${allPromoOrders.length} commandes triées par ordre chronologique:\n`);
+    
+    // 3. Récupérer les données actuelles du Sheets
+    const sheetsData = await googleSheetsService.getSheetData();
+    const header = sheetsData[0]; // Garder l'en-tête
+    
+    // 4. Créer les nouvelles données dans l'ordre chronologique
+    const newRows = [header]; // Commencer avec l'en-tête
+    
+    for (const order of allPromoOrders) {
+      const shippingName = order.shipping_address?.name || 
+        (order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'N/A');
+      
+      const formattedOrder = shopifyService.formatOrderForSheets(order);
+      
+      // Créer la ligne complète (colonnes A à L)
+      const rowData = [];
+      rowData[0] = ''; // A: ?
+      rowData[1] = ''; // B: ?
+      rowData[2] = ''; // C: ?
+      rowData[3] = shippingName; // D: Name
+      rowData[4] = ''; // E: ?
+      rowData[5] = ''; // F: ?
+      rowData[6] = formattedOrder.orderNumber; // G: Numéro de commande
+      rowData[7] = formattedOrder.trackingNumber; // H: Suivi de commande
+      rowData[8] = ''; // I: ?
+      rowData[9] = ''; // J: ?
+      rowData[10] = ''; // K: ?
+      rowData[11] = formattedOrder.itemsGift; // L: Items gift
+      
+      newRows.push(rowData);
+      console.log(`  ${order.name.padEnd(12)} - ${shippingName}`);
+    }
+    
+    // 5. Effacer tout le contenu du Sheets (sauf l'en-tête) et réécrire dans l'ordre
+    console.log(`\n✏️ Réécriture de ${newRows.length} lignes dans Google Sheets...`);
+    
+    // Effacer tout d'abord
+    const clearRange = `A2:L${sheetsData.length}`;
+    await googleSheetsService.sheets.spreadsheets.values.clear({
+      spreadsheetId: googleSheetsService.spreadsheetId,
+      range: clearRange
+    });
+    
+    // Écrire les nouvelles données
+    const writeRange = `A1:L${newRows.length}`;
+    await googleSheetsService.sheets.spreadsheets.values.update({
+      spreadsheetId: googleSheetsService.spreadsheetId,
+      range: writeRange,
+      valueInputOption: 'RAW',
+      resource: { values: newRows }
+    });
+    
+    // 6. Appliquer les hyperliens pour les numéros de tracking
+    for (let i = 1; i < newRows.length; i++) {
+      const row = newRows[i];
+      const trackingNumber = row[7]; // Colonne H
+      if (trackingNumber && trackingNumber.trim()) {
+        // Extraire l'URL de tracking depuis la commande Shopify
+        const order = allPromoOrders[i - 1];
+        const trackingUrl = order.fulfillments?.[0]?.tracking_info?.[0]?.url || null;
+        
+        if (trackingUrl) {
+          await googleSheetsService.updateRow(i + 1, row, trackingUrl);
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Réorganisation terminée: ${allPromoOrders.length} commandes dans l'ordre chronologique`,
+      totalOrders: allPromoOrders.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Find and insert missing orders with promo codes (OBSOLETE - utiliser reorganize-orders-chronologically)
 app.post('/api/find-and-insert-missing-orders', async (req, res) => {
   try {
     console.log('🔍 Recherche des commandes manquantes avec codes promo...');
