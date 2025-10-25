@@ -706,7 +706,130 @@ app.post('/api/force-update-row/:rowNumber', async (req, res) => {
   }
 });
 
-// Reorganize all orders in chronological order
+// Add missing orders with promo codes (simple append at the end)
+app.post('/api/add-missing-orders-only', async (req, res) => {
+  try {
+    console.log('🔍 Recherche des commandes manquantes avec codes promo...');
+    
+    // 1. Récupérer TOUTES les commandes avec codes promo depuis Shopify
+    let allPromoOrders = [];
+    let pageInfo = null;
+    let page = 0;
+    
+    while (page < 20) {
+      console.log(`📄 Récupération page ${page + 1}...`);
+      
+      let url = '/orders.json?limit=250&status=any';
+      if (pageInfo) url += `&page_info=${pageInfo}`;
+      
+      const data = await shopifyService.makeRequest(url);
+      if (!data.orders || data.orders.length === 0) break;
+      
+      const requiredCodes = ['J4Y4TC0G1FT', 'J4Y4TC0SH1P'];
+      const promoOrders = data.orders.filter(order => {
+        if (order.discount_codes && Array.isArray(order.discount_codes)) {
+          return order.discount_codes.some(dc => requiredCodes.includes(dc.code));
+        }
+        return false;
+      });
+      
+      allPromoOrders = allPromoOrders.concat(promoOrders);
+      console.log(`   → ${promoOrders.length}/${data.orders.length} avec codes promo (Total: ${allPromoOrders.length})`);
+      
+      pageInfo = data.page_info;
+      if (!pageInfo || data.orders.length < 250) break;
+      page++;
+    }
+    
+    console.log(`\n✅ ${allPromoOrders.length} commandes avec codes promo trouvées\n`);
+    
+    // 2. Récupérer les commandes existantes dans le Sheets
+    const sheetsData = await googleSheetsService.getSheetData();
+    const existingOrderNumbers = new Set();
+    
+    for (let i = 1; i < sheetsData.length; i++) {
+      const orderNum = sheetsData[i][6]; // Colonne G
+      if (orderNum && orderNum.trim()) {
+        existingOrderNumbers.add(orderNum.trim());
+      }
+    }
+    
+    console.log(`📊 ${existingOrderNumbers.size} commandes déjà dans le Google Sheets\n`);
+    
+    // 3. Identifier les commandes manquantes
+    const missingOrders = allPromoOrders.filter(order => !existingOrderNumbers.has(order.name));
+    
+    if (missingOrders.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Aucune commande manquante - toutes les commandes avec codes promo sont déjà dans le tableau',
+        totalPromoOrders: allPromoOrders.length,
+        existingOrders: existingOrderNumbers.size,
+        missingOrders: 0
+      });
+    }
+    
+    console.log(`🔍 ${missingOrders.length} commandes manquantes trouvées\n`);
+    
+    // 4. Ajouter les commandes manquantes à la fin du tableau
+    const insertedOrders = [];
+    let rowIndex = sheetsData.length + 1; // Ajouter après la dernière ligne
+    
+    for (const order of missingOrders) {
+      try {
+        const shippingName = order.shipping_address?.name || 
+          (order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'N/A');
+        
+        const formattedOrder = shopifyService.formatOrderForSheets(order);
+        
+        // Créer les données de la ligne
+        const rowData = Array(12).fill(''); // Ligne vide
+        rowData[3] = shippingName; // D: Name
+        rowData[6] = formattedOrder.orderNumber; // G: Numéro de commande
+        rowData[7] = formattedOrder.trackingNumber; // H: Suivi de commande
+        rowData[11] = formattedOrder.itemsGift; // L: Items gift
+        
+        // Ajouter la ligne dans Google Sheets
+        await googleSheetsService.updateRow(rowIndex, rowData, formattedOrder.trackingUrl);
+        
+        insertedOrders.push({
+          orderNumber: formattedOrder.orderNumber,
+          name: shippingName,
+          tracking: formattedOrder.trackingNumber,
+          items: formattedOrder.itemsGift
+        });
+        
+        console.log(`✅ Ajouté: ${formattedOrder.orderNumber} - ${shippingName}`);
+        
+        rowIndex++;
+        
+        // Petite pause pour éviter de surcharger l'API
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`❌ Erreur lors de l'ajout de ${order.name}:`, error.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `${insertedOrders.length} commandes ajoutées à la fin du tableau`,
+      totalPromoOrders: allPromoOrders.length,
+      existingOrders: existingOrderNumbers.size,
+      missingOrders: missingOrders.length,
+      insertedOrders: insertedOrders
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Reorganize all orders in chronological order (KEEP FOR REFERENCE)
 app.post('/api/reorganize-orders-chronologically', async (req, res) => {
   try {
     console.log('🔄 Réorganisation de TOUTES les commandes dans l\'ordre chronologique...');
