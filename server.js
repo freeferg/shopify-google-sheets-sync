@@ -706,6 +706,144 @@ app.post('/api/force-update-row/:rowNumber', async (req, res) => {
   }
 });
 
+// Find and insert missing orders with promo codes
+app.post('/api/find-and-insert-missing-orders', async (req, res) => {
+  try {
+    console.log('🔍 Recherche des commandes manquantes avec codes promo...');
+    
+    // 1. Récupérer toutes les commandes avec codes promo depuis Shopify
+    let allPromoOrders = [];
+    let pageInfo = null;
+    let page = 0;
+    
+    while (page < 20) {
+      console.log(`📄 Récupération page ${page + 1}...`);
+      
+      let url = '/orders.json?limit=250&status=any';
+      if (pageInfo) {
+        url += `&page_info=${pageInfo}`;
+      }
+      
+      const data = await shopifyService.makeRequest(url);
+      
+      if (!data.orders || data.orders.length === 0) break;
+      
+      // Filtrer les commandes avec codes promo
+      const requiredCodes = ['J4Y4TC0G1FT', 'J4Y4TC0SH1P'];
+      const promoOrders = data.orders.filter(order => {
+        if (order.discount_codes && Array.isArray(order.discount_codes)) {
+          return order.discount_codes.some(dc => requiredCodes.includes(dc.code));
+        }
+        return false;
+      });
+      
+      allPromoOrders = allPromoOrders.concat(promoOrders);
+      console.log(`   → ${promoOrders.length}/${data.orders.length} commandes avec codes promo (Total: ${allPromoOrders.length})`);
+      
+      pageInfo = data.page_info;
+      if (!pageInfo || data.orders.length < 250) break;
+      page++;
+    }
+    
+    console.log(`✅ ${allPromoOrders.length} commandes avec codes promo trouvées\n`);
+    
+    // 2. Trier par numéro de commande
+    allPromoOrders.sort((a, b) => {
+      const numA = parseInt(a.name.replace('#TCO', '').replace('#C', ''));
+      const numB = parseInt(b.name.replace('#TCO', '').replace('#C', ''));
+      return numA - numB;
+    });
+    
+    // 3. Récupérer les commandes existantes dans le Google Sheets
+    const sheetsData = await googleSheetsService.getSheetData();
+    const existingOrderNumbers = new Set();
+    
+    for (let i = 1; i < sheetsData.length; i++) {
+      const orderNum = sheetsData[i][6]; // Colonne G
+      if (orderNum && orderNum.trim()) {
+        existingOrderNumbers.add(orderNum.trim());
+      }
+    }
+    
+    console.log(`📊 ${existingOrderNumbers.size} commandes déjà dans le Google Sheets\n`);
+    
+    // 4. Identifier les commandes manquantes
+    const missingOrders = allPromoOrders.filter(order => !existingOrderNumbers.has(order.name));
+    
+    console.log(`🔍 ${missingOrders.length} commandes manquantes trouvées\n`);
+    
+    if (missingOrders.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Aucune commande manquante',
+        totalPromoOrders: allPromoOrders.length,
+        existingOrders: existingOrderNumbers.size,
+        missingOrders: 0,
+        insertedOrders: []
+      });
+    }
+    
+    // 5. Insérer les commandes manquantes dans l'ordre chronologique
+    const insertedOrders = [];
+    
+    for (const order of missingOrders) {
+      try {
+        // Formater les données de la commande
+        const shippingName = order.shipping_address?.name || 
+          (order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'N/A');
+        
+        const formattedOrder = shopifyService.formatOrderForSheets(order);
+        
+        // Préparer les données de la ligne
+        const newRowData = [];
+        newRowData[3] = shippingName; // Colonne D - Name
+        newRowData[6] = formattedOrder.orderNumber; // Colonne G - Numéro de commande
+        newRowData[7] = formattedOrder.trackingNumber; // Colonne H - Suivi de commande
+        newRowData[11] = formattedOrder.itemsGift; // Colonne L - Items gift
+        
+        // Insérer la ligne dans Google Sheets
+        // Trouver la bonne position (après la dernière ligne ou selon l'ordre chronologique)
+        // Pour simplifier, on insère à la fin
+        const newRowIndex = sheetsData.length + 1;
+        
+        await googleSheetsService.updateRow(newRowIndex, newRowData, formattedOrder.trackingUrl);
+        
+        insertedOrders.push({
+          orderNumber: formattedOrder.orderNumber,
+          name: shippingName,
+          tracking: formattedOrder.trackingNumber,
+          items: formattedOrder.itemsGift
+        });
+        
+        console.log(`✅ Inséré: ${formattedOrder.orderNumber} - ${shippingName}`);
+        
+        // Petite pause pour éviter de surcharger l'API
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`❌ Erreur lors de l'insertion de ${order.name}:`, error.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `${insertedOrders.length} commandes insérées`,
+      totalPromoOrders: allPromoOrders.length,
+      existingOrders: existingOrderNumbers.size,
+      missingOrders: missingOrders.length,
+      insertedOrders: insertedOrders,
+      orders: insertedOrders.map(o => o.orderNumber)
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ========================================
 // WEBHOOKS DÉSACTIVÉS
 // ========================================
