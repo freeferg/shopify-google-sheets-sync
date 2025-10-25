@@ -783,39 +783,85 @@ app.post('/api/find-and-insert-missing-orders', async (req, res) => {
       });
     }
     
-    // 5. Insérer les commandes manquantes dans l'ordre chronologique
+    // 5. Trier les commandes existantes par numéro de commande pour trouver les positions d'insertion
+    const existingRowsWithOrderNum = [];
+    for (let i = 1; i < sheetsData.length; i++) {
+      const row = sheetsData[i];
+      const orderNum = row[6]; // Colonne G
+      if (orderNum && orderNum.trim()) {
+        existingRowsWithOrderNum.push({
+          rowIndex: i + 1, // Numéro de ligne dans Sheets
+          orderNum: orderNum.trim(),
+          row: row
+        });
+      }
+    }
+    
+    // Trier par numéro de commande
+    existingRowsWithOrderNum.sort((a, b) => {
+      const numA = parseInt(a.orderNum.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+      const numB = parseInt(b.orderNum.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+      return numA - numB;
+    });
+    
+    console.log(`\n📊 Commandes existantes triées par ordre chronologique:`);
+    existingRowsWithOrderNum.forEach((item, index) => {
+      console.log(`  ${(index + 1).toString().padStart(2)}. ${item.orderNum}`);
+    });
+    
+    // 6. Trouver les positions d'insertion pour les commandes manquantes
     const insertedOrders = [];
     
     for (const order of missingOrders) {
       try {
+        const orderNum = order.name;
+        const orderNumInt = parseInt(orderNum.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+        
+        // Trouver l'index d'insertion dans l'ordre chronologique
+        let insertPosition = existingRowsWithOrderNum.length + 1; // Par défaut à la fin
+        for (let i = 0; i < existingRowsWithOrderNum.length; i++) {
+          const existingNumInt = parseInt(existingRowsWithOrderNum[i].orderNum.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+          if (orderNumInt < existingNumInt) {
+            insertPosition = existingRowsWithOrderNum[i].rowIndex;
+            break;
+          }
+        }
+        
+        console.log(`\n📌 Insertion de ${orderNum} à la position ${insertPosition}`);
+        
         // Formater les données de la commande
         const shippingName = order.shipping_address?.name || 
           (order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : 'N/A');
         
         const formattedOrder = shopifyService.formatOrderForSheets(order);
         
-        // Préparer les données de la ligne
-        const newRowData = [];
-        newRowData[3] = shippingName; // Colonne D - Name
-        newRowData[6] = formattedOrder.orderNumber; // Colonne G - Numéro de commande
-        newRowData[7] = formattedOrder.trackingNumber; // Colonne H - Suivi de commande
-        newRowData[11] = formattedOrder.itemsGift; // Colonne L - Items gift
+        // Créer les données de la ligne
+        const rowData = [];
+        rowData[3] = shippingName; // Colonne D - Name
+        rowData[6] = formattedOrder.orderNumber; // Colonne G - Numéro de commande
+        rowData[7] = formattedOrder.trackingNumber; // Colonne H - Suivi de commande
+        rowData[11] = formattedOrder.itemsGift; // Colonne L - Items gift
         
-        // Insérer la ligne dans Google Sheets
-        // Trouver la bonne position (après la dernière ligne ou selon l'ordre chronologique)
-        // Pour simplifier, on insère à la fin
-        const newRowIndex = sheetsData.length + 1;
-        
-        await googleSheetsService.updateRow(newRowIndex, newRowData, formattedOrder.trackingUrl);
+        // Insérer dans Google Sheets
+        await googleSheetsService.insertRowAtPosition(insertPosition, rowData);
         
         insertedOrders.push({
           orderNumber: formattedOrder.orderNumber,
           name: shippingName,
           tracking: formattedOrder.trackingNumber,
-          items: formattedOrder.itemsGift
+          items: formattedOrder.itemsGift,
+          position: insertPosition
         });
         
-        console.log(`✅ Inséré: ${formattedOrder.orderNumber} - ${shippingName}`);
+        console.log(`✅ Inséré: ${formattedOrder.orderNumber} - ${shippingName} à la position ${insertPosition}`);
+        
+        // Mettre à jour la liste des positions existantes
+        existingRowsWithOrderNum.push({ rowIndex: insertPosition, orderNum: orderNum, row: rowData });
+        existingRowsWithOrderNum.sort((a, b) => {
+          const numA = parseInt(a.orderNum.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+          const numB = parseInt(b.orderNum.replace('#TCO', '').replace('#TC0', '').replace('#C', ''));
+          return numA - numB;
+        });
         
         // Petite pause pour éviter de surcharger l'API
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -827,12 +873,13 @@ app.post('/api/find-and-insert-missing-orders', async (req, res) => {
     
     res.json({
       success: true,
-      message: `${insertedOrders.length} commandes insérées`,
+      message: `Réorganisation terminée: ${insertedOrders.length} nouvelles commandes insérées, ${allOrdersSorted.length} commandes au total (ordre chronologique)`,
       totalPromoOrders: allPromoOrders.length,
       existingOrders: existingOrderNumbers.size,
       missingOrders: missingOrders.length,
       insertedOrders: insertedOrders,
-      orders: insertedOrders.map(o => o.orderNumber)
+      totalOrders: allOrdersSorted.length,
+      orders: allOrdersSorted.map(o => o.name)
     });
     
   } catch (error) {
